@@ -1,0 +1,15 @@
+# 機密與環境
+.env
+*.local
+service-account*.json
+opencode-sk-*.json
+*-adminsdk-*.json
+
+# 依賴
+node_modules
+
+# 系統
+.DS_Store
+Thumbs.db
+desktop.ini
+.firebase/

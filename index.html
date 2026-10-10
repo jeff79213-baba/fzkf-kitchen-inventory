@@ -1,0 +1,874 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#ff7a45">
+<title>風自然廚房庫存管理</title>
+<style>
+:root{
+  --bg:#f4f5f7; --card:#ffffff; --text:#1d2129; --muted:#6b7280;
+  --line:#e5e7eb; --primary:#ff7a45; --primary-t:#ffffff;
+  --danger:#e5484d; --ok:#16a34a; --ok-bg:#e8f8ee; --danger-bg:#fdeaea;
+  --chip:#eef0f3; --shadow:0 1px 3px rgba(0,0,0,.08);
+  --header:#ffffff;
+}
+html[data-theme="dark"]{
+  --bg:#111417; --card:#1b1f23; --text:#e8eaed; --muted:#9aa0a6;
+  --line:#2c3238; --primary:#ff8a5b; --primary-t:#1a1200;
+  --danger:#ff6b6b; --ok:#7ddc9b; --ok-bg:#14301f; --danger-bg:#3a1c1c;
+  --chip:#242a30; --shadow:0 1px 3px rgba(0,0,0,.5);
+  --header:#171b1f;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg); color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft JhengHei","PingFang TC","Noto Sans TC",sans-serif;
+  font-size:17px; line-height:1.5; padding-bottom:40px;
+}
+header{
+  position:sticky; top:0; z-index:30; background:var(--header);
+  display:flex; align-items:center; gap:8px; padding:12px 14px;
+  border-bottom:1px solid var(--line); box-shadow:var(--shadow);
+}
+header h1{font-size:18px; margin:0; flex:1; font-weight:800; letter-spacing:.5px}
+.icon-btn{
+  border:none; background:var(--chip); color:var(--text); border-radius:12px;
+  width:46px; height:46px; font-size:22px; cursor:pointer; display:inline-flex;
+  align-items:center; justify-content:center;
+}
+.icon-btn:active{transform:scale(.94)}
+
+nav#tabs{
+  position:sticky; top:71px; z-index:20; background:var(--header);
+  display:flex; gap:8px; overflow-x:auto; padding:8px 12px; border-bottom:1px solid var(--line);
+  scrollbar-width:none;
+}
+nav#tabs::-webkit-scrollbar{display:none}
+.tab{
+  position:relative; flex:0 0 auto; border:1px solid var(--line); background:var(--card);
+  color:var(--text); border-radius:999px; padding:10px 16px; font-size:16px;
+  font-weight:600; cursor:pointer; white-space:nowrap;
+}
+.tab.active{background:var(--primary); color:var(--primary-t); border-color:var(--primary)}
+.tab .badge{
+  position:absolute; top:-6px; right:-6px; min-width:22px; height:22px; padding:0 5px;
+  background:var(--danger); color:#fff; border-radius:999px; font-size:13px;
+  font-weight:700; display:flex; align-items:center; justify-content:center; border:2px solid var(--header);
+}
+main{padding:12px 12px 30px; max-width:640px; margin:0 auto}
+.cat-head{display:flex; align-items:baseline; gap:8px; margin:6px 4px 12px}
+.cat-head h2{margin:0; font-size:20px}
+.cat-head .sub{color:var(--muted); font-size:14px}
+
+.card{
+  background:var(--card); border:1px solid var(--line); border-radius:16px;
+  padding:14px; margin-bottom:12px; box-shadow:var(--shadow);
+}
+.card .top{display:flex; align-items:flex-start; gap:8px}
+.card .name{font-size:18px; font-weight:700; flex:1}
+.card .target{color:var(--muted); font-size:14px; margin-top:2px}
+.card .note{color:var(--muted); font-size:14px; margin-top:6px; word-break:break-word}
+.tag{display:inline-block; font-size:12px; background:var(--chip); color:var(--muted);
+  border-radius:8px; padding:2px 7px; margin-left:6px; vertical-align:middle}
+.edit-btn{border:none; background:transparent; font-size:20px; cursor:pointer; padding:4px 6px; color:var(--muted)}
+.qty{display:flex; align-items:center; gap:10px; margin-top:12px}
+.qty .lbl{font-size:14px; color:var(--muted); margin-right:auto}
+.step{
+  width:52px; height:52px; border-radius:14px; border:1px solid var(--line);
+  background:var(--chip); color:var(--text); font-size:26px; font-weight:700; cursor:pointer;
+  display:flex; align-items:center; justify-content:center;
+}
+.step:active{transform:scale(.93)}
+input.stock{
+  width:88px; height:52px; text-align:center; font-size:22px; font-weight:700;
+  border:1px solid var(--line); border-radius:14px; background:var(--card); color:var(--text);
+}
+input.stock:focus{outline:2px solid var(--primary); border-color:var(--primary)}
+.status{margin-top:12px; font-size:16px; font-weight:700}
+.need{color:var(--danger); background:var(--danger-bg); border-radius:10px; padding:8px 12px; display:inline-block}
+.ok{color:var(--ok); background:var(--ok-bg); border-radius:10px; padding:8px 12px; display:inline-block}
+
+.addbtn{
+  width:100%; padding:16px; border:2px dashed var(--line); border-radius:16px;
+  background:transparent; color:var(--muted); font-size:17px; font-weight:700; cursor:pointer;
+}
+.addbtn:active{background:var(--chip)}
+
+.empty{color:var(--muted); text-align:center; padding:30px 10px}
+
+/* 補貨清單頁 */
+.preview{
+  background:var(--card); border:1px solid var(--line); border-radius:16px; padding:16px;
+  white-space:pre-wrap; word-break:break-word; font-size:16px; line-height:1.7;
+  font-family:"Microsoft JhengHei","Noto Sans TC",monospace; margin-bottom:14px; overflow-x:auto;
+}
+.btn-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+.big{
+  border:none; border-radius:14px; padding:18px 10px; font-size:17px; font-weight:700;
+  cursor:pointer; background:var(--chip); color:var(--text);
+}
+.big.primary{background:var(--primary); color:var(--primary-t)}
+.big:active{transform:scale(.97)}
+
+/* 設定選單 */
+.overlay{position:fixed; inset:0; background:rgba(0,0,0,.4); z-index:40}
+.sheet{
+  position:fixed; z-index:50; left:0; right:0; bottom:0; background:var(--card);
+  border-radius:20px 20px 0 0; padding:14px; display:flex; flex-direction:column; gap:8px;
+  max-width:640px; margin:0 auto; max-height:85vh; overflow-y:auto;
+  padding-bottom:calc(14px + env(safe-area-inset-bottom));
+}
+.sheet button{
+  text-align:left; border:none; background:var(--chip); color:var(--text); border-radius:14px;
+  padding:16px; font-size:17px; font-weight:600; cursor:pointer;
+}
+.sheet button:active{transform:scale(.98)}
+.sheet hr{border:none; border-top:1px solid var(--line); width:100%; margin:2px 0}
+
+/* Modal */
+.modal{position:fixed; inset:0; z-index:60; background:rgba(0,0,0,.5); display:flex;
+  align-items:flex-end; justify-content:center}
+.modal-card{
+  background:var(--card); width:100%; max-width:640px; border-radius:20px 20px 0 0;
+  padding:18px; max-height:92vh; overflow-y:auto;
+  padding-bottom:calc(18px + env(safe-area-inset-bottom));
+}
+.modal-card h2{margin:0 0 14px; font-size:20px}
+.modal-card label{display:block; font-size:14px; color:var(--muted); margin-bottom:12px}
+.modal-card label input,.modal-card label select{
+  display:block; width:100%; margin-top:5px; padding:13px; font-size:17px;
+  border:1px solid var(--line); border-radius:12px; background:var(--bg); color:var(--text);
+}
+.modal-card label.chk{display:flex; align-items:center; gap:10px; font-size:16px; color:var(--text)}
+.modal-card label.chk input{width:24px; height:24px; margin:0}
+.modal-actions{display:flex; gap:10px; margin-top:6px}
+.modal-actions button{
+  flex:1; padding:16px; border:none; border-radius:14px; font-size:17px; font-weight:700;
+  background:var(--chip); color:var(--text); cursor:pointer;
+}
+.modal-actions button.primary{background:var(--primary); color:var(--primary-t)}
+.modal-actions button.danger{background:var(--danger-bg); color:var(--danger)}
+.hidden{display:none !important}
+
+#toast{
+  position:fixed; left:50%; bottom:30px; transform:translateX(-50%) translateY(20px);
+  background:#222; color:#fff; padding:12px 20px; border-radius:12px; font-size:15px;
+  opacity:0; pointer-events:none; transition:.25s; z-index:100; max-width:90vw; text-align:center;
+}
+#toast.show{opacity:1; transform:translateX(-50%) translateY(0)}
+#toast.err{background:var(--danger)}
+
+#printArea{display:none}
+
+@media print{
+  body{background:#fff; color:#000; padding:0; font-size:11px}
+  header, nav#tabs, main, .overlay, .sheet, .modal, #toast{display:none !important}
+  #printArea{display:block; color:#000}
+  #printArea h1{font-size:16px; margin:0 0 2px}
+  #printArea .date{font-size:12px; margin-bottom:8px}
+  #printArea .cat{font-size:13px; font-weight:700; border-bottom:1px solid #000;
+    margin-top:8px; padding-bottom:2px}
+  #printArea .row{font-size:12px; line-height:1.5; padding-left:2px}
+  #printArea .total{font-size:12px; font-weight:700; margin-top:10px; border-top:1px solid #000; padding-top:4px}
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>風自然廚房庫存管理</h1>
+  <button class="icon-btn" data-action="theme-toggle" title="切換深色模式">🌗</button>
+  <button class="icon-btn" data-action="open-menu" title="設定">⚙️</button>
+</header>
+
+<nav id="tabs"></nav>
+<main id="view"></main>
+
+<div id="menuOverlay" class="overlay hidden" data-action="close-menu"></div>
+<div id="menuSheet" class="sheet hidden">
+  <button data-action="open-cat-new">➕ 新增分類</button>
+  <button data-action="open-cat-edit">✏️ 編輯目前分類</button>
+  <button data-action="delete-cat">🗑️ 刪除目前分類</button>
+  <button data-action="restore">♻️ 還原範例資料</button>
+  <hr>
+  <button data-action="export-json">⬇️ 匯出 JSON（備份）</button>
+  <button data-action="import-json">⬆️ 匯入 JSON（還原）</button>
+  <button data-action="copy-md">📄 複製 Markdown</button>
+  <hr>
+  <button data-action="theme-toggle">🌗 切換深色模式</button>
+  <button data-action="close-menu">關閉</button>
+</div>
+
+<div id="itemModal" class="modal hidden">
+  <div class="modal-card">
+    <h2 id="itemModalTitle">新增品項</h2>
+    <label>品名<input id="f-name" autocomplete="off"></label>
+    <label>分類<select id="f-cat"></select></label>
+    <label>單位<input id="f-unit" placeholder="例如：箱、包、顆" autocomplete="off"></label>
+    <label>目前庫存<input id="f-stock" type="number" step="0.5" min="0" inputmode="decimal"></label>
+    <label>應備量<input id="f-target" type="number" step="0.5" min="0" inputmode="decimal"></label>
+    <label>備註<input id="f-note" placeholder="選填" autocomplete="off"></label>
+    <label class="chk"><input type="checkbox" id="f-est"> 應備量為暫估</label>
+    <div class="modal-actions">
+      <button data-action="delete-item" class="danger hidden" id="f-del">刪除</button>
+      <button data-action="close-modal">取消</button>
+      <button data-action="save-item" class="primary">儲存</button>
+    </div>
+  </div>
+</div>
+
+<div id="catModal" class="modal hidden">
+  <div class="modal-card">
+    <h2 id="catModalTitle">新增分類</h2>
+    <label>圖示（可貼 emoji）<input id="cf-icon" placeholder="📦" maxlength="4" autocomplete="off"></label>
+    <label>名稱<input id="cf-name" autocomplete="off"></label>
+    <div class="modal-actions">
+      <button data-action="close-modal">取消</button>
+      <button data-action="save-cat" class="primary">儲存</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+<div id="printArea"></div>
+<input type="file" id="importFile" accept=".json,application/json" hidden>
+
+<script>
+(function(){
+"use strict";
+
+var STORE_KEY = "fzkf-inventory-v1";
+var THEME_KEY = "fzkf-theme";
+var ORDER_TAB = "__order__";
+
+var state = null;
+var currentTab = null;
+var editingItemId = null;
+var editingCatId = null;
+
+/* ---------- 工具 ---------- */
+function uid(){ return "x" + Date.now().toString(36) + Math.floor(Math.random()*1e8).toString(36); }
+function esc(s){
+  return String(s == null ? "" : s)
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+}
+function fmt(n){
+  n = Math.round((Number(n)||0)*2)/2;
+  return Number.isInteger(n) ? String(n) : n.toFixed(1);
+}
+function parseQty(v){
+  var n = parseFloat(v);
+  if(!isFinite(n) || n < 0) n = 0;
+  return Math.round(n*2)/2;
+}
+function needOf(it){ return Math.max(0, Math.round((it.target - it.stock)*2)/2); }
+function catById(id){ for(var i=0;i<state.categories.length;i++){ if(state.categories[i].id===id) return state.categories[i]; } return null; }
+var WEEK = ["日","一","二","三","四","五","六"];
+
+function toast(msg, isErr){
+  var t = document.getElementById("toast");
+  t.textContent = msg;
+  t.className = "show" + (isErr ? " err" : "");
+  clearTimeout(toast._t);
+  toast._t = setTimeout(function(){ t.className = ""; }, 2200);
+}
+
+/* ---------- 儲存 ---------- */
+function load(){
+  try{
+    var raw = localStorage.getItem(STORE_KEY);
+    if(!raw) return null;
+    var data = JSON.parse(raw);
+    if(!data || !Array.isArray(data.categories) || !Array.isArray(data.items)) return null;
+    return data;
+  }catch(e){
+    toast("讀取本機資料失敗，已載入範例資料", true);
+    return null;
+  }
+}
+function save(){
+  try{
+    localStorage.setItem(STORE_KEY, JSON.stringify(state));
+  }catch(e){
+    toast("儲存失敗（瀏覽器可能已滿或被限制）", true);
+  }
+}
+
+/* ---------- 範例資料 ---------- */
+function seed(){
+  var defs = [
+    ["🥛","小飲料",[
+      ["光泉無加糖豆漿","箱",1.5,1.5,"",false],
+      ["光泉巧克力牛乳","箱",2,2,"",false],
+      ["光泉哈密瓜牛乳","箱",2,2,"",false],
+      ["美粒果柳橙汁","瓶",8,8,"",false]
+    ]],
+    ["🍎","水果",[
+      ["芭樂","顆",4,4,"",false],
+      ["火龍果","顆",6,6,"",false],
+      ["澳洲澄","顆",6,6,"",false],
+      ["奇異果","顆",8,8,"",false],
+      ["小蘋果","顆",8,8,"",false],
+      ["大蘋果","顆",8,8,"",false],
+      ["百香果","顆",15,15,"",false]
+    ]],
+    ["🍞","土司",[
+      ["吐司","條",3,3,"",false]
+    ]],
+    ["🍪","點心",[
+      ["芝麻餐包","盒",1,1,"冰箱另有 1 包",false]
+    ]],
+    ["🥟","蒸包",[
+      ["燒賣","盒",4,6,"",false],
+      ["冷凍香筍肉包","包",0.5,2,"剩半包不夠用",true],
+      ["造型包","包",1,1,"2 個半包都已拆開",false],
+      ["彩色小饅頭","包",1.5,1.5,"",false],
+      ["冷凍雞蛋小饅頭","包",1,1,"",false],
+      ["冷凍黑糖小饅頭","包",1,1,"",false],
+      ["沖繩黑糖小銀絲捲","包",0.5,0.5,"",false],
+      ["香濃小巧克力捲","包",1.5,1.5,"",false],
+      ["鮮奶銀絲捲","包",2,2,"每包 5 粒，共 10 粒",false]
+    ]],
+    ["🍟","炸物",[
+      ["耐炸油","桶",0,1,"一定要叫",true],
+      ["雞塊","包",0,11,"常用，缺很多",false],
+      ["細薯","包",0,5,"常用，缺很多",false],
+      ["地瓜大薯","包",0,1,"常用，缺貨",true],
+      ["甜不辣","包",0,1,"很久沒出貨",true],
+      ["彩色蝦片","包",0,1,"炸物配色用",true],
+      ["山藥球／地瓜球","包",0,1,"炸物配色用",true],
+      ["小熱狗","包",0,1,"炸物配色用",true],
+      ["薯餅","片",12,12,"",false],
+      ["紫金QQ球","包",1,1,"",false],
+      ["蛋黃芋圓丸","包",3,3,"",false],
+      ["麥多雞球","包",1,1,"",false],
+      ["大熱狗","包",1.5,0,"不好炸，下次不建議購買",false],
+      ["鮮蚵卷","包",2,0,"店長買來試炸",false]
+    ]],
+    ["🥢","小菜",[
+      ["花生麵筋","罐",1,1,"",false],
+      ["韓式泡菜","罐",2,2,"",false],
+      ["豆棗","包",0.5,0.5,"",false]
+    ]],
+    ["🥚","蛋類",[
+      ["茶葉蛋","盒",9,9,"",false],
+      ["生蛋","盤",1,1,"一盤 30 顆",false]
+    ]],
+    ["🧻","配件耗材",[
+      ["吸油紙","包",0,1,"要之前的花瓣型，比較好用",true]
+    ]],
+    ["🍯","果醬",[
+      ["花生醬","罐",1,1,"剛開",false],
+      ["奶酥醬","罐",1,1,"剛開",false],
+      ["巧克力醬","罐",1,1,"剛開",false],
+      ["藍莓醬","盒",1,1,"兩盒分別剩 4/5 與 1/5",false]
+    ]],
+    ["🍬","糖果零食",[
+      ["玉米濃湯","籃",2,2,"",false],
+      ["玉黍叔","籃",2,2,"",false],
+      ["野菜園","籃",3,3,"",false],
+      ["鹹疏餅","籃",0.5,0.5,"",false],
+      ["嗶嗶糖","包",1,1,"大包",false],
+      ["棉花糖","包",1,1,"大包",false],
+      ["小乖乖","包",1,1,"大包",false]
+    ]],
+    ["☕","咖啡與糖包",[
+      ["咖啡豆","包",7,7,"",false],
+      ["糖包","包",2.5,2.5,"",false]
+    ]],
+    ["🍚","柴米油鹽醬醋茶",[]]
+  ];
+  var categories = [], items = [];
+  for(var i=0;i<defs.length;i++){
+    var icon = defs[i][0], name = defs[i][1], rows = defs[i][2];
+    var cid = uid();
+    categories.push({ id:cid, name:name, icon:icon });
+    for(var j=0;j<rows.length;j++){
+      var r = rows[j];
+      items.push({ id:uid(), categoryId:cid, name:r[0], unit:r[1], stock:r[2], target:r[3], note:r[4], estTarget:r[5] });
+    }
+  }
+  return { version:1, categories:categories, items:items };
+}
+
+/* ---------- 主題 ---------- */
+function applyTheme(){
+  var saved = null;
+  try{ saved = localStorage.getItem(THEME_KEY); }catch(e){}
+  var dark;
+  if(saved === "dark" || saved === "light"){
+    dark = saved === "dark";
+  }else{
+    dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+  }
+  document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+}
+function toggleTheme(){
+  var isDark = document.documentElement.getAttribute("data-theme") === "dark";
+  var next = isDark ? "light" : "dark";
+  document.documentElement.setAttribute("data-theme", next);
+  try{ localStorage.setItem(THEME_KEY, next); }catch(e){ toast("無法記住主題設定", true); }
+}
+
+/* ---------- 統計 ---------- */
+function neededItemsIn(catId){
+  var out = [];
+  for(var i=0;i<state.items.length;i++){
+    var it = state.items[i];
+    if(it.categoryId === catId && needOf(it) > 0) out.push(it);
+  }
+  return out;
+}
+function totalNeeded(){
+  var n = 0;
+  for(var i=0;i<state.items.length;i++){ if(needOf(state.items[i]) > 0) n++; }
+  return n;
+}
+
+/* ---------- 渲染 ---------- */
+function render(){
+  if(currentTab !== ORDER_TAB && !catById(currentTab)){
+    currentTab = state.categories.length ? state.categories[0].id : ORDER_TAB;
+  }
+  renderTabs();
+  if(currentTab === ORDER_TAB) renderOrder(); else renderCategory(catById(currentTab));
+}
+function renderTabs(){
+  var nav = document.getElementById("tabs");
+  var html = "";
+  for(var i=0;i<state.categories.length;i++){
+    var c = state.categories[i];
+    var n = neededItemsIn(c.id).length;
+    html += '<button class="tab'+(currentTab===c.id?" active":"")+'" data-action="tab" data-id="'+c.id+'">'
+      + esc(c.icon) + ' ' + esc(c.name)
+      + (n>0 ? '<span class="badge">'+n+'</span>' : '')
+      + '</button>';
+  }
+  var tn = totalNeeded();
+  html += '<button class="tab'+(currentTab===ORDER_TAB?" active":"")+'" data-action="tab" data-id="'+ORDER_TAB+'">📋 補貨清單'
+    + (tn>0 ? '<span class="badge">'+tn+'</span>' : '') + '</button>';
+  nav.innerHTML = html;
+}
+
+function renderCategory(cat){
+  var view = document.getElementById("view");
+  if(!cat){ view.innerHTML = '<div class="empty">目前沒有分類，請從 ⚙️ 新增分類</div>'; return; }
+  var items = [];
+  for(var i=0;i<state.items.length;i++){ if(state.items[i].categoryId === cat.id) items.push(state.items[i]); }
+  var needCount = 0;
+  for(var k=0;k<items.length;k++){ if(needOf(items[k])>0) needCount++; }
+
+  var html = '<div class="cat-head"><h2>'+esc(cat.icon)+' '+esc(cat.name)+'</h2>'
+    + '<span class="sub">'+(needCount>0 ? needCount+' 項需補' : '全部足夠')+'</span></div>';
+
+  if(items.length === 0){
+    html += '<div class="empty">這個分類還沒有品項</div>';
+  }
+  for(var j=0;j<items.length;j++){
+    html += itemCard(items[j]);
+  }
+  html += '<button class="addbtn" data-action="add-item">＋ 新增品項</button>';
+  view.innerHTML = html;
+}
+
+function itemCard(it){
+  var n = needOf(it);
+  var targetHtml = '應備 '+fmt(it.target)+' '+esc(it.unit)
+    + (it.estTarget ? '<span class="tag">暫估</span>' : '');
+  var status = n>0
+    ? '<span class="need">需補 '+fmt(n)+' '+esc(it.unit)+'</span>'
+    : '<span class="ok">足夠</span>';
+  return ''
+  + '<div class="card">'
+  +   '<div class="top">'
+  +     '<div style="flex:1">'
+  +       '<div class="name">'+esc(it.name)+'</div>'
+  +       '<div class="target">'+targetHtml+'</div>'
+  +       (it.note ? '<div class="note">📝 '+esc(it.note)+'</div>' : '')
+  +     '</div>'
+  +     '<button class="edit-btn" data-action="edit-item" data-id="'+it.id+'" title="編輯">✏️</button>'
+  +   '</div>'
+  +   '<div class="qty">'
+  +     '<span class="lbl">目前庫存</span>'
+  +     '<button class="step" data-action="step" data-id="'+it.id+'" data-delta="-1">－</button>'
+  +     '<input class="stock" type="number" step="0.5" min="0" inputmode="decimal" '
+  +       'data-role="stock" data-id="'+it.id+'" value="'+fmt(it.stock)+'" '
+  +       'onfocus="this.select()">'
+  +     '<button class="step" data-action="step" data-id="'+it.id+'" data-delta="1">＋</button>'
+  +   '</div>'
+  +   '<div class="status">'+status+'</div>'
+  + '</div>';
+}
+
+/* ---------- 補貨清單文字 ---------- */
+function orderText(){
+  var now = new Date();
+  var d = (now.getMonth()+1) + "/" + now.getDate();
+  var lines = ["📋 補貨清單", "📅 " + d + "（週" + WEEK[now.getDay()] + "）", ""];
+  var total = 0;
+  for(var i=0;i<state.categories.length;i++){
+    var cat = state.categories[i];
+    var need = neededItemsIn(cat.id);
+    if(!need.length) continue;
+    lines.push("━━━━━━━━━━");
+    lines.push(cat.icon + " " + cat.name);
+    lines.push("━━━━━━━━━━");
+    for(var j=0;j<need.length;j++){
+      var it = need[j];
+      var note = it.note ? "（" + it.note + "）" : "";
+      lines.push("▫️ " + it.name + "　補 " + fmt(needOf(it)) + " " + it.unit + note);
+      total++;
+    }
+    lines.push("");
+  }
+  if(total === 0){
+    return "📋 補貨清單\n📅 " + d + "（週" + WEEK[now.getDay()] + "）\n\n目前沒有需要補貨的品項 ✅";
+  }
+  lines.push("✅ 共 " + total + " 項待補");
+  return lines.join("\n");
+}
+
+function orderHtml(){
+  var now = new Date();
+  var d = (now.getMonth()+1) + "/" + now.getDate();
+  var out = '<h1>📋 補貨清單</h1><div class="date">📅 ' + d + "（週" + WEEK[now.getDay()] + "）</div>";
+  var total = 0;
+  for(var i=0;i<state.categories.length;i++){
+    var cat = state.categories[i];
+    var need = neededItemsIn(cat.id);
+    if(!need.length) continue;
+    out += '<div class="cat">' + esc(cat.icon) + " " + esc(cat.name) + "</div>";
+    for(var j=0;j<need.length;j++){
+      var it = need[j];
+      var note = it.note ? "（" + esc(it.note) + "）" : "";
+      out += '<div class="row">▫️ ' + esc(it.name) + "　補 " + fmt(needOf(it)) + " " + esc(it.unit) + note + "</div>";
+      total++;
+    }
+  }
+  if(total === 0) out += '<div class="row">目前沒有需要補貨的品項 ✅</div>';
+  else out += '<div class="total">✅ 共 ' + total + " 項待補</div>";
+  return out;
+}
+
+function renderOrder(){
+  var view = document.getElementById("view");
+  var hasAny = totalNeeded() > 0;
+  var html = ''
+  + '<div class="cat-head"><h2>📋 補貨清單</h2><span class="sub">'
+  +   (hasAny ? totalNeeded()+" 項待補" : "目前沒有需補品項") + '</span></div>'
+  + '<div class="preview">' + esc(orderText()) + '</div>'
+  + '<div class="btn-grid">'
+  +   '<button class="big primary" data-action="copy-order">📄 複製清單</button>'
+  +   '<button class="big primary" data-action="share-order">📤 分享到 LINE</button>'
+  +   '<button class="big" data-action="download-word">⬇️ 下載 Word 檔</button>'
+  +   '<button class="big" data-action="print-order">🖨️ 列印</button>'
+  + '</div>';
+  view.innerHTML = html;
+}
+
+/* ---------- 複製 / 分享 / Word / 列印 ---------- */
+function copyText(text, okMsg){
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(function(){
+      toast(okMsg || "已複製");
+    }).catch(function(){
+      fallbackCopy(text, okMsg);
+    });
+  }else{
+    fallbackCopy(text, okMsg);
+  }
+}
+function fallbackCopy(text, okMsg){
+  try{
+    var ta = document.createElement("textarea");
+    ta.value = text; ta.style.position="fixed"; ta.style.opacity="0";
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    var ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    toast(ok ? (okMsg || "已複製") : "複製失敗，請長按選取");
+  }catch(e){ toast("複製失敗，請長按選取", true); }
+}
+function shareOrder(){
+  var text = orderText();
+  if(navigator.share){
+    navigator.share({ text:text }).then(function(){}).catch(function(err){
+      if(err && err.name === "AbortError") return;
+      copyText(text, "此裝置不支援分享，已幫你複製");
+    });
+  }else{
+    copyText(text, "此裝置不支援分享，已幫你複製");
+  }
+}
+function downloadWord(){
+  var body = orderHtml();
+  var html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" '
+    + 'xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">'
+    + '<head><meta charset="utf-8"><title>補貨清單</title>'
+    + '<style>@page{size:A4;margin:1.5cm}'
+    + 'body{font-family:"Microsoft JhengHei","Noto Sans TC",sans-serif;font-size:11pt;color:#000}'
+    + 'h1{font-size:15pt;margin:0 0 2pt}.date{font-size:11pt;margin-bottom:8pt}'
+    + '.cat{font-size:12pt;font-weight:bold;border-bottom:1px solid #000;margin-top:8pt;padding-bottom:2pt}'
+    + '.row{font-size:11pt;line-height:1.5}.total{font-size:11pt;font-weight:bold;margin-top:10pt;border-top:1px solid #000;padding-top:4pt}'
+    + '</style></head><body>' + body + '</body></html>';
+  var now = new Date();
+  var stamp = now.getFullYear() + pad(now.getMonth()+1) + pad(now.getDate());
+  saveBlob(new Blob(["\ufeff"+html], {type:"application/msword"}), "補貨清單-"+stamp+".doc");
+  toast("已下載 Word 檔");
+}
+function pad(n){ return (n<10?"0":"")+n; }
+function saveBlob(blob, filename){
+  try{
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 4000);
+  }catch(e){ toast("下載失敗", true); }
+}
+function printOrder(){
+  var area = document.getElementById("printArea");
+  area.innerHTML = orderHtml();
+  window.print();
+}
+
+/* ---------- JSON 匯出 / 匯入 ---------- */
+function exportJson(){
+  var now = new Date();
+  var stamp = now.getFullYear() + pad(now.getMonth()+1) + pad(now.getDate());
+  var data = JSON.stringify(state, null, 2);
+  saveBlob(new Blob([data], {type:"application/json"}), "風自然廚房庫存-"+stamp+".json");
+  toast("已匯出 JSON 備份");
+}
+function importJson(file){
+  var reader = new FileReader();
+  reader.onload = function(){
+    try{
+      var data = JSON.parse(reader.result);
+      if(!data || !Array.isArray(data.categories) || !Array.isArray(data.items)){
+        throw new Error("格式錯誤");
+      }
+      if(!confirm("匯入後將覆蓋目前所有資料，確定要繼續嗎？")) return;
+      state = data;
+      currentTab = state.categories.length ? state.categories[0].id : ORDER_TAB;
+      save(); render(); toast("已匯入資料");
+    }catch(e){
+      toast("匯入失敗：檔案格式不正確", true);
+    }
+  };
+  reader.onerror = function(){ toast("讀取檔案失敗", true); };
+  reader.readAsText(file, "utf-8");
+}
+
+/* ---------- Markdown ---------- */
+function buildMarkdown(){
+  var lines = ["# 風自然廚房庫存清單", ""];
+  for(var i=0;i<state.categories.length;i++){
+    var cat = state.categories[i];
+    lines.push("## " + cat.icon + " " + cat.name);
+    var items = [];
+    for(var k=0;k<state.items.length;k++){ if(state.items[k].categoryId===cat.id) items.push(state.items[k]); }
+    if(!items.length){ lines.push(""); lines.push("_（無品項）_"); lines.push(""); continue; }
+    lines.push("");
+    lines.push("| 品名 | 單位 | 目前庫存 | 應備量 | 需補 | 備註 |");
+    lines.push("|---|---|---|---|---|---|");
+    for(var j=0;j<items.length;j++){
+      var it = items[j];
+      var n = needOf(it);
+      lines.push("| " + it.name + " | " + it.unit + " | " + fmt(it.stock) + " | "
+        + fmt(it.target) + (it.estTarget?"（暫估）":"") + " | "
+        + (n>0 ? fmt(n) : "-") + " | " + (it.note||"") + " |");
+    }
+    lines.push("");
+  }
+  return lines.join("\n");
+}
+
+/* ---------- Modal / 選單 ---------- */
+function openMenu(){ document.getElementById("menuOverlay").className="overlay"; document.getElementById("menuSheet").className="sheet"; }
+function closeMenu(){ document.getElementById("menuOverlay").className="overlay hidden"; document.getElementById("menuSheet").className="sheet hidden"; }
+function closeModals(){ document.getElementById("itemModal").className="modal hidden"; document.getElementById("catModal").className="modal hidden"; }
+
+function openItemModal(id){
+  editingItemId = id || null;
+  var isNew = !id;
+  document.getElementById("itemModalTitle").textContent = isNew ? "新增品項" : "編輯品項";
+  var sel = document.getElementById("f-cat");
+  var opts = "";
+  for(var i=0;i<state.categories.length;i++){
+    opts += '<option value="'+state.categories[i].id+'">'+esc(state.categories[i].icon)+" "+esc(state.categories[i].name)+'</option>';
+  }
+  sel.innerHTML = opts;
+
+  var it = null;
+  if(!isNew){ for(var k=0;k<state.items.length;k++){ if(state.items[k].id===id){ it=state.items[k]; break; } } }
+  document.getElementById("f-name").value = it ? it.name : "";
+  document.getElementById("f-unit").value = it ? it.unit : "";
+  document.getElementById("f-stock").value = it ? fmt(it.stock) : "0";
+  document.getElementById("f-target").value = it ? fmt(it.target) : "0";
+  document.getElementById("f-note").value = it ? it.note : "";
+  document.getElementById("f-est").checked = it ? !!it.estTarget : false;
+  sel.value = it ? it.categoryId : (catById(currentTab) ? currentTab : (state.categories[0] && state.categories[0].id));
+  document.getElementById("f-del").className = isNew ? "danger hidden" : "danger";
+  document.getElementById("itemModal").className = "modal";
+  setTimeout(function(){ document.getElementById("f-name").focus(); }, 50);
+}
+function openCatModal(id){
+  editingCatId = id || null;
+  var isNew = !id;
+  document.getElementById("catModalTitle").textContent = isNew ? "新增分類" : "編輯分類";
+  var cat = isNew ? null : catById(id);
+  document.getElementById("cf-icon").value = cat ? cat.icon : "📦";
+  document.getElementById("cf-name").value = cat ? cat.name : "";
+  document.getElementById("catModal").className = "modal";
+  setTimeout(function(){ document.getElementById("cf-name").focus(); }, 50);
+}
+
+function saveItem(){
+  var name = document.getElementById("f-name").value.trim();
+  if(!name){ toast("請輸入品名", true); return; }
+  var unit = document.getElementById("f-unit").value.trim();
+  var stock = parseQty(document.getElementById("f-stock").value);
+  var target = parseQty(document.getElementById("f-target").value);
+  var note = document.getElementById("f-note").value.trim();
+  var est = document.getElementById("f-est").checked;
+  var catId = document.getElementById("f-cat").value;
+  if(editingItemId){
+    for(var i=0;i<state.items.length;i++){
+      if(state.items[i].id===editingItemId){
+        var it = state.items[i];
+        it.name=name; it.unit=unit; it.stock=stock; it.target=target; it.note=note; it.estTarget=est; it.categoryId=catId;
+        break;
+      }
+    }
+  }else{
+    state.items.push({ id:uid(), categoryId:catId, name:name, unit:unit, stock:stock, target:target, note:note, estTarget:est });
+  }
+  save(); closeModals(); render(); toast("已儲存");
+}
+function deleteItem(){
+  if(!editingItemId) return;
+  if(!confirm("確定要刪除這個品項嗎？")) return;
+  var out = [];
+  for(var i=0;i<state.items.length;i++){ if(state.items[i].id!==editingItemId) out.push(state.items[i]); }
+  state.items = out;
+  save(); closeModals(); render(); toast("已刪除品項");
+}
+function saveCat(){
+  var name = document.getElementById("cf-name").value.trim();
+  if(!name){ toast("請輸入分類名稱", true); return; }
+  var icon = document.getElementById("cf-icon").value.trim() || "📦";
+  if(editingCatId){
+    var c = catById(editingCatId);
+    if(c){ c.name=name; c.icon=icon; }
+  }else{
+    var id = uid();
+    state.categories.push({ id:id, name:name, icon:icon });
+    currentTab = id;
+  }
+  save(); closeModals(); render(); toast("已儲存");
+}
+function deleteCat(){
+  var cat = catById(currentTab);
+  if(!cat){ toast("請先切到要刪除的分類", true); return; }
+  var n = 0;
+  for(var i=0;i<state.items.length;i++){ if(state.items[i].categoryId===cat.id) n++; }
+  var msg = n>0 ? ("刪除分類「"+cat.name+"」將連同 "+n+" 個品項一起刪除，確定嗎？")
+                : ("確定要刪除分類「"+cat.name+"」嗎？");
+  if(!confirm(msg)) return;
+  var kept = [];
+  for(var j=0;j<state.items.length;j++){ if(state.items[j].categoryId!==cat.id) kept.push(state.items[j]); }
+  state.items = kept;
+  var cats = [];
+  for(var k=0;k<state.categories.length;k++){ if(state.categories[k].id!==cat.id) cats.push(state.categories[k]); }
+  state.categories = cats;
+  currentTab = state.categories.length ? state.categories[0].id : ORDER_TAB;
+  save(); closeMenu(); render(); toast("已刪除分類");
+}
+function restoreSeed(){
+  if(!confirm("將還原成範例資料，目前所有變更都會消失，確定嗎？")) return;
+  state = seed();
+  currentTab = state.categories.length ? state.categories[0].id : ORDER_TAB;
+  save(); closeMenu(); render(); toast("已還原範例資料");
+}
+
+/* ---------- 事件 ---------- */
+function findItem(id){ for(var i=0;i<state.items.length;i++){ if(state.items[i].id===id) return state.items[i]; } return null; }
+
+function onClick(e){
+  var el = e.target.closest("[data-action]");
+  if(!el) return;
+  var a = el.getAttribute("data-action");
+  var id = el.getAttribute("data-id");
+  switch(a){
+    case "tab": currentTab = id; closeMenu(); render(); window.scrollTo({top:0}); break;
+    case "step":
+      var it = findItem(id);
+      if(it){ it.stock = Math.max(0, Math.round((it.stock + parseFloat(el.getAttribute("data-delta")))*2)/2); save(); render(); }
+      break;
+    case "edit-item": openItemModal(id); break;
+    case "add-item": openItemModal(null); break;
+    case "open-menu": openMenu(); break;
+    case "close-menu": closeMenu(); break;
+    case "open-cat-new": closeMenu(); openCatModal(null); break;
+    case "open-cat-edit": closeMenu(); if(catById(currentTab)) openCatModal(currentTab); else toast("補貨清單頁沒有分類可編輯", true); break;
+    case "delete-cat": closeMenu(); deleteCat(); break;
+    case "restore": restoreSeed(); break;
+    case "export-json": closeMenu(); exportJson(); break;
+    case "import-json": closeMenu(); document.getElementById("importFile").click(); break;
+    case "copy-md": closeMenu(); copyText(buildMarkdown(), "已複製 Markdown"); break;
+    case "theme-toggle": toggleTheme(); break;
+    case "close-modal": closeModals(); break;
+    case "save-item": saveItem(); break;
+    case "delete-item": deleteItem(); break;
+    case "save-cat": saveCat(); break;
+    case "copy-order": copyText(orderText(), "已複製補貨清單"); break;
+    case "share-order": shareOrder(); break;
+    case "download-word": downloadWord(); break;
+    case "print-order": printOrder(); break;
+  }
+}
+
+function onFocusIn(e){
+  if(e.target && e.target.getAttribute && e.target.getAttribute("data-role")==="stock"){
+    try{ e.target.select(); }catch(err){}
+  }
+}
+function onChange(e){
+  var t = e.target;
+  if(t && t.getAttribute && t.getAttribute("data-role")==="stock"){
+    var it = findItem(t.getAttribute("data-id"));
+    if(it){ it.stock = parseQty(t.value); save(); render(); }
+  }
+}
+function onKeydown(e){
+  if(e.key === "Escape"){ closeModals(); closeMenu(); }
+}
+
+/* ---------- 啟動 ---------- */
+function init(){
+  applyTheme();
+  state = load();
+  if(!state){ state = seed(); save(); }
+  currentTab = state.categories.length ? state.categories[0].id : ORDER_TAB;
+
+  document.getElementById("importFile").addEventListener("change", function(ev){
+    var f = ev.target.files && ev.target.files[0];
+    if(f) importJson(f);
+    ev.target.value = "";
+  });
+  document.addEventListener("click", onClick);
+  document.addEventListener("focusin", onFocusIn);
+  document.addEventListener("change", onChange);
+  document.addEventListener("keydown", onKeydown);
+
+  render();
+}
+
+init();
+})();
+</script>
+</body>
+</html>

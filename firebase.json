@@ -1,0 +1,14 @@
+{
+  "hosting": {
+    "site": "fzkf-sk",
+    "public": ".",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**",
+      "docs/**",
+      "*.md",
+      "網址.txt"
+    ]
+  }
+}
