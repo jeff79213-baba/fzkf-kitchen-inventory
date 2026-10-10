@@ -172,6 +172,9 @@ input.stock.sm{width:60px; height:44px; font-size:19px; border-radius:12px}
 }
 .modal-actions button.primary{background:var(--primary); color:var(--primary-t)}
 .modal-actions button.danger{background:var(--danger-bg); color:var(--danger)}
+.copyhint{font-size:14px; color:var(--muted); margin:0 0 10px}
+.copyarea{width:100%; height:38vh; padding:12px; font-size:13px; line-height:1.5; border:1px solid var(--line);
+  border-radius:12px; background:var(--bg); color:var(--text); font-family:monospace; resize:vertical; margin-bottom:12px}
 .hidden{display:none !important}
 
 #toast{
@@ -254,6 +257,17 @@ input.stock.sm{width:60px; height:44px; font-size:19px; border-radius:12px}
 
 <div id="toast"></div>
 <div id="printArea"></div>
+<div id="copyModal" class="modal hidden">
+  <div class="modal-card">
+    <h2 id="copyModalTitle">複製備份內容</h2>
+    <p class="copyhint">此裝置無法直接存檔，請按「一鍵複製」，再貼到記事本、LINE 或雲端硬碟保存。</p>
+    <textarea id="copyArea" class="copyarea" readonly></textarea>
+    <div class="modal-actions">
+      <button data-action="close-modal">關閉</button>
+      <button data-action="copy-area" class="primary">一鍵複製</button>
+    </div>
+  </div>
+</div>
 <input type="file" id="importFile" accept=".json,application/json" hidden>
 
 <script>
@@ -683,19 +697,59 @@ function downloadWord(){
     + '</style></head><body>' + body + '</body></html>';
   var now = new Date();
   var stamp = now.getFullYear() + pad(now.getMonth()+1) + pad(now.getDate());
-  saveBlob(new Blob(["\ufeff"+html], {type:"application/msword"}), "補貨清單-"+stamp+".doc");
-  toast("已下載 Word 檔");
+  exportFile(new Blob(["\ufeff"+html], {type:"application/msword"}), "補貨清單-"+stamp+".doc", "已下載 Word 檔", null);
 }
 function pad(n){ return (n<10?"0":"")+n; }
+
+function isMobile(){
+  var ua = navigator.userAgent || "";
+  if(/Android|iPhone|iPad|iPod/i.test(ua)) return true;
+  return navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1;
+}
+function canShareFile(blob, filename){
+  try{
+    if(!(navigator.share && navigator.canShare)) return false;
+    var file = new File([blob], filename, { type: blob.type || "application/octet-stream" });
+    return navigator.canShare({ files:[file] }) ? file : false;
+  }catch(e){ return false; }
+}
 function saveBlob(blob, filename){
   try{
     var url = URL.createObjectURL(blob);
     var a = document.createElement("a");
-    a.href = url; a.download = filename;
+    a.href = url; a.download = filename; a.rel = "noopener";
     document.body.appendChild(a); a.click();
     document.body.removeChild(a);
     setTimeout(function(){ URL.revokeObjectURL(url); }, 4000);
-  }catch(e){ toast("下載失敗", true); }
+    return true;
+  }catch(e){ return false; }
+}
+function exportFile(blob, filename, downloadMsg, fallbackText){
+  if(isMobile()){
+    var file = canShareFile(blob, filename);
+    if(file){
+      navigator.share({ files:[file], title: filename }).then(function(){
+        toast("已開啟分享，選「儲存到檔案」即可");
+      }).catch(function(err){
+        if(err && err.name === "AbortError") return;
+        if(fallbackText != null) showCopyModal(fallbackText);
+        else toast("分享未完成，可改用電腦下載", true);
+      });
+      return true;
+    }
+    if(fallbackText != null){ showCopyModal(fallbackText); return true; }
+    toast("此裝置無法下載，請改用電腦", true);
+    return false;
+  }
+  if(saveBlob(blob, filename)){ toast(downloadMsg); return true; }
+  if(fallbackText != null){ showCopyModal(fallbackText); return true; }
+  toast("下載失敗", true);
+  return false;
+}
+function showCopyModal(text){
+  document.getElementById("copyModalTitle").textContent = "複製備份內容";
+  document.getElementById("copyArea").value = text;
+  document.getElementById("copyModal").className = "modal";
 }
 function printOrder(){
   var area = document.getElementById("printArea");
@@ -708,8 +762,7 @@ function exportJson(){
   var now = new Date();
   var stamp = now.getFullYear() + pad(now.getMonth()+1) + pad(now.getDate());
   var data = JSON.stringify(state, null, 2);
-  saveBlob(new Blob([data], {type:"application/json"}), "風自然廚房庫存-"+stamp+".json");
-  toast("已匯出 JSON 備份");
+  exportFile(new Blob([data], {type:"application/json"}), "風自然廚房庫存-"+stamp+".json", "已匯出 JSON 備份", data);
 }
 function importJson(file){
   var reader = new FileReader();
@@ -758,7 +811,7 @@ function buildMarkdown(){
 /* ---------- Modal / 選單 ---------- */
 function openMenu(){ document.getElementById("menuOverlay").className="overlay"; document.getElementById("menuSheet").className="sheet"; }
 function closeMenu(){ document.getElementById("menuOverlay").className="overlay hidden"; document.getElementById("menuSheet").className="sheet hidden"; }
-function closeModals(){ document.getElementById("itemModal").className="modal hidden"; document.getElementById("catModal").className="modal hidden"; }
+function closeModals(){ ["itemModal","catModal","copyModal"].forEach(function(id){ document.getElementById(id).className="modal hidden"; }); }
 
 function openItemModal(id){
   editingItemId = id || null;
@@ -897,6 +950,7 @@ function onClick(e){
     case "save-item": saveItem(); break;
     case "delete-item": deleteItem(); break;
     case "save-cat": saveCat(); break;
+    case "copy-area": copyText(document.getElementById("copyArea").value, "已複製"); break;
     case "copy-order": copyText(orderText(), "已複製補貨清單"); break;
     case "share-order": shareOrder(); break;
     case "download-word": downloadWord(); break;
