@@ -1,0 +1,14 @@
+--- GitHub ---
+https://github.com/jeff79213-baba/fzkf-kitchen-inventory
+
+--- GitHub Pages ---
+https://jeff79213-baba.github.io/fzkf-kitchen-inventory/
+
+--- Firebase Hosting ---
+https://fzkf-sk.web.app
+
+--- 本機預覽 ---
+http://localhost:3000
+
+--- 本地路徑 ---
+C:\Users\TW-10\Documents\firebase雲端資料夾\風自然廚房庫存管理
