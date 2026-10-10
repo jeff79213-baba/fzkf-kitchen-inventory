@@ -98,6 +98,26 @@ input.stock:focus{outline:2px solid var(--primary); border-color:var(--primary)}
 
 .empty{color:var(--muted); text-align:center; padding:30px 10px}
 
+/* 全部品項頁 */
+.all-cat{
+  font-size:16px; font-weight:800; margin:16px 2px 6px; padding-bottom:6px;
+  border-bottom:2px solid var(--line); position:sticky; top:131px; background:var(--bg);
+  z-index:5;
+}
+.allrow{
+  display:flex; align-items:center; gap:10px; background:var(--card);
+  border:1px solid var(--line); border-radius:14px; padding:10px 12px; margin-bottom:8px;
+}
+.allrow-main{flex:1; min-width:0}
+.allrow-name{font-size:17px; font-weight:700; word-break:break-word}
+.allrow-meta{font-size:13px; color:var(--muted); margin-top:2px}
+.needtxt{color:var(--danger); font-weight:700}
+.oktxt{color:var(--ok); font-weight:700}
+.all-empty{color:var(--muted); font-size:14px; padding:4px 4px 8px}
+.qty.compact{margin-top:0; gap:6px}
+.step.sm{width:44px; height:44px; font-size:22px; border-radius:12px}
+input.stock.sm{width:66px; height:44px; font-size:19px; border-radius:12px}
+
 /* 補貨清單頁 */
 .preview{
   background:var(--card); border:1px solid var(--line); border-radius:16px; padding:16px;
@@ -241,6 +261,7 @@ input.stock:focus{outline:2px solid var(--primary); border-color:var(--primary)}
 var STORE_KEY = "fzkf-inventory-v1";
 var THEME_KEY = "fzkf-theme";
 var ORDER_TAB = "__order__";
+var ALL_TAB = "__all__";
 
 var state = null;
 var currentTab = null;
@@ -429,11 +450,13 @@ function totalNeeded(){
 
 /* ---------- 渲染 ---------- */
 function render(){
-  if(currentTab !== ORDER_TAB && !catById(currentTab)){
+  if(currentTab !== ORDER_TAB && currentTab !== ALL_TAB && !catById(currentTab)){
     currentTab = state.categories.length ? state.categories[0].id : ORDER_TAB;
   }
   renderTabs();
-  if(currentTab === ORDER_TAB) renderOrder(); else renderCategory(catById(currentTab));
+  if(currentTab === ORDER_TAB) renderOrder();
+  else if(currentTab === ALL_TAB) renderAll();
+  else renderCategory(catById(currentTab));
 }
 function renderTabs(){
   var nav = document.getElementById("tabs");
@@ -447,6 +470,7 @@ function renderTabs(){
       + '</button>';
   }
   var tn = totalNeeded();
+  html += '<button class="tab'+(currentTab===ALL_TAB?" active":"")+'" data-action="tab" data-id="'+ALL_TAB+'">📦 全部品項</button>';
   html += '<button class="tab'+(currentTab===ORDER_TAB?" active":"")+'" data-action="tab" data-id="'+ORDER_TAB+'">📋 補貨清單'
     + (tn>0 ? '<span class="badge">'+tn+'</span>' : '') + '</button>';
   nav.innerHTML = html;
@@ -500,6 +524,41 @@ function itemCard(it){
   +   '</div>'
   +   '<div class="status">'+status+'</div>'
   + '</div>';
+}
+
+/* ---------- 全部品項頁 ---------- */
+function allRow(it){
+  var n = needOf(it);
+  var est = it.estTarget ? '<span class="tag">暫估</span>' : "";
+  var st = n>0 ? '<span class="needtxt">需補 '+fmt(n)+'</span>' : '<span class="oktxt">足夠</span>';
+  return ''
+  + '<div class="allrow">'
+  +   '<div class="allrow-main">'
+  +     '<div class="allrow-name">'+esc(it.name)+'</div>'
+  +     '<div class="allrow-meta">應備 '+fmt(it.target)+' '+esc(it.unit)+est+' ・ '+st+'</div>'
+  +   '</div>'
+  +   '<div class="qty compact">'
+  +     '<button class="step sm" data-action="step" data-id="'+it.id+'" data-delta="-1">－</button>'
+  +     '<input class="stock sm" type="number" step="0.5" min="0" inputmode="decimal" '
+  +       'data-role="stock" data-id="'+it.id+'" value="'+fmt(it.stock)+'" onfocus="this.select()">'
+  +     '<button class="step sm" data-action="step" data-id="'+it.id+'" data-delta="1">＋</button>'
+  +   '</div>'
+  + '</div>';
+}
+function renderAll(){
+  var view = document.getElementById("view");
+  var html = '<div class="cat-head"><h2>📦 全部品項</h2><span class="sub">'
+    + state.items.length + ' 項・一頁直接調整庫存</span></div>';
+  if(!state.items.length){ html += '<div class="empty">目前沒有品項</div>'; }
+  for(var i=0;i<state.categories.length;i++){
+    var cat = state.categories[i];
+    var items = [];
+    for(var k=0;k<state.items.length;k++){ if(state.items[k].categoryId===cat.id) items.push(state.items[k]); }
+    html += '<div class="all-cat">'+esc(cat.icon)+' '+esc(cat.name)+'</div>';
+    if(!items.length){ html += '<div class="all-empty">（無品項）</div>'; continue; }
+    for(var j=0;j<items.length;j++){ html += allRow(items[j]); }
+  }
+  view.innerHTML = html;
 }
 
 /* ---------- 補貨清單文字 ---------- */
@@ -813,7 +872,7 @@ function onClick(e){
     case "open-menu": openMenu(); break;
     case "close-menu": closeMenu(); break;
     case "open-cat-new": closeMenu(); openCatModal(null); break;
-    case "open-cat-edit": closeMenu(); if(catById(currentTab)) openCatModal(currentTab); else toast("補貨清單頁沒有分類可編輯", true); break;
+    case "open-cat-edit": closeMenu(); if(catById(currentTab)) openCatModal(currentTab); else toast("請先切到某個分類頁再編輯", true); break;
     case "delete-cat": closeMenu(); deleteCat(); break;
     case "restore": restoreSeed(); break;
     case "export-json": closeMenu(); exportJson(); break;
