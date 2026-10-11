@@ -113,12 +113,23 @@ input.stock:focus{outline:2px solid var(--primary); border-color:var(--primary)}
 }
 .cat-sec-name{font-size:17px; font-weight:800; flex:1; min-width:0; word-break:break-word}
 .cat-sec-tools{display:flex; gap:6px; flex:0 0 auto}
-.mini-move,.mini-edit{
+.mini-edit{
   border:1px solid var(--line); background:var(--card); color:var(--text);
   border-radius:10px; min-width:40px; height:40px; padding:0 8px; font-size:16px; font-weight:800; cursor:pointer;
 }
-.mini-move:active,.mini-edit:active{background:var(--chip)}
+.mini-edit:active{background:var(--chip)}
 .addbtn.sm{margin-top:6px; padding:12px; font-size:15px}
+
+/* 調整分類順序 */
+#sortList{display:flex; flex-direction:column; gap:8px; margin:4px 0 14px; max-height:58vh; overflow-y:auto}
+.sortrow{display:flex; align-items:center; gap:10px}
+.sortbtn{
+  width:56px; height:56px; flex:0 0 auto; border:1px solid var(--line); background:var(--chip);
+  color:var(--text); border-radius:14px; font-size:22px; font-weight:800; cursor:pointer;
+}
+.sortbtn:disabled{opacity:.3}
+.sortbtn:active:not(:disabled){background:var(--line)}
+.sortname{flex:1; min-width:0; font-size:17px; font-weight:700; word-break:break-word}
 
 /* 全部品項頁 */
 .all-cat{
@@ -235,6 +246,7 @@ input.stock.sm{width:60px; height:44px; font-size:19px; border-radius:12px}
 <div id="menuOverlay" class="overlay hidden" data-action="close-menu"></div>
 <div id="menuSheet" class="sheet hidden">
   <button data-action="open-cat-new">➕ 新增分類</button>
+  <button data-action="open-sort">⇅ 調整分類順序</button>
   <button data-action="restore">♻️ 還原範例資料</button>
   <hr>
   <button data-action="export-json">⬇️ 匯出 JSON（備份）</button>
@@ -272,6 +284,18 @@ input.stock.sm{width:60px; height:44px; font-size:19px; border-radius:12px}
       <button data-action="delete-cat" class="danger hidden" id="cf-del">刪除</button>
       <button data-action="close-modal">取消</button>
       <button data-action="save-cat" class="primary">儲存</button>
+    </div>
+  </div>
+</div>
+
+<div id="sortModal" class="modal hidden">
+  <div class="modal-card">
+    <h2>調整分類順序</h2>
+    <p class="copyhint">用 ↑ ↓ 把分類排到想要的順序，完成後套用。</p>
+    <div id="sortList" class="sortlist"></div>
+    <div class="modal-actions">
+      <button data-action="close-modal">取消</button>
+      <button data-action="apply-sort" class="primary">完成</button>
     </div>
   </div>
 </div>
@@ -591,7 +615,7 @@ function renderAll(){
     html += '<button class="chip" data-action="jump" data-id="'+c.id+'">'+esc(c.icon)+' '+esc(c.name)+'</button>';
   }
   html += '</div>';
-  html += '<div class="allhint">點標籤可跳到該分類；用分類右側的 ↑ ↓ 調整順序</div>';
+  html += '<div class="allhint">點標籤可跳到該分類（調整順序：⚙️ → 調整分類順序）</div>';
 
   for(var m=0;m<state.categories.length;m++){
     var cat = state.categories[m];
@@ -601,8 +625,6 @@ function renderAll(){
     html +=   '<div class="cat-sec-head" data-cat="'+cat.id+'">'
            +     '<span class="cat-sec-name">'+esc(cat.icon)+' '+esc(cat.name)+'</span>'
            +     '<span class="cat-sec-tools">'
-           +       '<button class="mini-move" data-action="cat-up" data-id="'+cat.id+'" title="上移">↑</button>'
-           +       '<button class="mini-move" data-action="cat-down" data-id="'+cat.id+'" title="下移">↓</button>'
            +       '<button class="mini-edit" data-action="open-cat" data-id="'+cat.id+'">✏️</button>'
            +     '</span>'
            +   '</div>';
@@ -840,7 +862,7 @@ function buildMarkdown(){
 /* ---------- Modal / 選單 ---------- */
 function openMenu(){ document.getElementById("menuOverlay").className="overlay"; document.getElementById("menuSheet").className="sheet"; }
 function closeMenu(){ document.getElementById("menuOverlay").className="overlay hidden"; document.getElementById("menuSheet").className="sheet hidden"; }
-function closeModals(){ ["itemModal","catModal","copyModal"].forEach(function(id){ document.getElementById(id).className="modal hidden"; }); }
+function closeModals(){ ["itemModal","catModal","sortModal","copyModal"].forEach(function(id){ document.getElementById(id).className="modal hidden"; }); sortWorking = null; }
 
 function openItemModal(id, presetCat){
   editingItemId = id || null;
@@ -936,6 +958,44 @@ function deleteCat(){
   state.categories = cats;
   save(); closeModals(); render(); toast("已刪除分類");
 }
+var sortWorking = null;
+function openSortModal(){
+  sortWorking = state.categories.map(function(c){ return c.id; });
+  renderSortList();
+  document.getElementById("sortModal").className = "modal";
+}
+function renderSortList(){
+  var box = document.getElementById("sortList");
+  var html = "";
+  for(var i=0;i<sortWorking.length;i++){
+    var c = catById(sortWorking[i]);
+    if(!c) continue;
+    html += '<div class="sortrow">'
+          + '<button class="sortbtn" data-action="sort-up" data-id="'+c.id+'"'+(i===0?' disabled':'')+'>↑</button>'
+          + '<span class="sortname">'+esc(c.icon)+' '+esc(c.name)+'</span>'
+          + '<button class="sortbtn" data-action="sort-down" data-id="'+c.id+'"'+(i===sortWorking.length-1?' disabled':'')+'>↓</button>'
+          + '</div>';
+  }
+  box.innerHTML = html;
+}
+function moveSort(id, dir){
+  var idx = sortWorking.indexOf(id);
+  var j = idx + dir;
+  if(idx < 0 || j < 0 || j >= sortWorking.length) return;
+  var t = sortWorking[idx];
+  sortWorking[idx] = sortWorking[j];
+  sortWorking[j] = t;
+  renderSortList();
+}
+function applySort(){
+  var map = {};
+  for(var i=0;i<state.categories.length;i++){ map[state.categories[i].id] = state.categories[i]; }
+  var out = [];
+  for(var k=0;k<sortWorking.length;k++){ if(map[sortWorking[k]]) out.push(map[sortWorking[k]]); }
+  if(out.length === state.categories.length){ state.categories = out; save(); }
+  closeModals(); render(); toast("已更新分類順序");
+}
+
 function restoreSeed(){
   if(!confirm("將還原成範例資料，目前所有變更都會消失，確定嗎？")) return;
   state = seed();
@@ -957,8 +1017,6 @@ function onClick(e){
       var sec = document.querySelector('.cat-section[data-cat="'+id+'"]');
       if(sec){ window.scrollTo({ top: sec.getBoundingClientRect().top + window.pageYOffset - 138, behavior:"smooth" }); }
       break;
-    case "cat-up": moveCat(id, -1); break;
-    case "cat-down": moveCat(id, 1); break;
     case "step":
       var it = findItem(id);
       if(it){ it.stock = Math.max(0, Math.round((it.stock + parseFloat(el.getAttribute("data-delta")))*2)/2); save(); render(); }
@@ -974,6 +1032,10 @@ function onClick(e){
     case "open-menu": openMenu(); break;
     case "close-menu": closeMenu(); break;
     case "open-cat-new": closeMenu(); openCatModal(null); break;
+    case "open-sort": closeMenu(); openSortModal(); break;
+    case "sort-up": moveSort(id, -1); break;
+    case "sort-down": moveSort(id, 1); break;
+    case "apply-sort": applySort(); break;
     case "delete-cat": deleteCat(); break;
     case "restore": restoreSeed(); break;
     case "export-json": closeMenu(); exportJson(); break;
@@ -990,17 +1052,6 @@ function onClick(e){
     case "download-word": downloadWord(); break;
     case "print-order": printOrder(); break;
   }
-}
-
-function moveCat(id, dir){
-  var idx = -1;
-  for(var i=0;i<state.categories.length;i++){ if(state.categories[i].id===id){ idx = i; break; } }
-  var j = idx + dir;
-  if(idx < 0 || j < 0 || j >= state.categories.length) return;
-  var tmp = state.categories[idx];
-  state.categories[idx] = state.categories[j];
-  state.categories[j] = tmp;
-  save(); render();
 }
 
 function onFocusIn(e){
