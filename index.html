@@ -214,6 +214,7 @@ input.stock.sm{width:60px; height:44px; font-size:19px; border-radius:12px}
 .modal-actions button.primary{background:var(--primary); color:var(--primary-t)}
 .modal-actions button.danger{background:var(--danger-bg); color:var(--danger)}
 .copyhint{font-size:14px; color:var(--muted); margin:0 0 10px}
+.fieldhint{font-size:13px; color:var(--muted); margin:-6px 0 12px; line-height:1.4}
 .copyarea{width:100%; height:38vh; padding:12px; font-size:13px; line-height:1.5; border:1px solid var(--line);
   border-radius:12px; background:var(--bg); color:var(--text); font-family:monospace; resize:vertical; margin-bottom:12px}
 .hidden{display:none !important}
@@ -268,7 +269,8 @@ input.stock.sm{width:60px; height:44px; font-size:19px; border-radius:12px}
 <div id="itemModal" class="modal hidden">
   <div class="modal-card">
     <h2 id="itemModalTitle">新增品項</h2>
-    <label>品名<input id="f-name" autocomplete="off"></label>
+    <label><span id="f-name-label">品名</span><input id="f-name" autocomplete="off"></label>
+    <div class="fieldhint" id="f-name-hint"></div>
     <label>分類<select id="f-cat"></select></label>
     <label>單位<input id="f-unit" placeholder="例如：箱、包、顆" autocomplete="off"></label>
     <label>目前庫存<input id="f-stock" type="number" step="0.5" min="0" inputmode="decimal"></label>
@@ -599,7 +601,7 @@ function allRow(it){
   var est = it.estTarget ? '<span class="tag">暫估</span>' : "";
   var st = n>0 ? '<span class="needtxt">需補 '+fmt(n)+' '+esc(it.unit)+'</span>' : '<span class="oktxt">足夠</span>';
   return ''
-  + '<div class="allrow">'
+  + '<div class="allrow" data-id="'+it.id+'">'
   +   '<div class="allrow-main">'
   +     '<div class="allrow-name">'+esc(it.name)+est+'</div>'
   +     '<div class="allrow-meta">'+st+'</div>'
@@ -623,7 +625,7 @@ function renderAll(){
     html += '<button class="chip" data-action="jump" data-id="'+c.id+'">'+esc(c.icon)+' '+esc(c.name)+'</button>';
   }
   html += '</div>';
-  html += '<div class="allhint">點標籤可跳到該分類（調整順序：⚙️ → 調整分類順序）</div>';
+  html += '<div class="allhint">點標籤可跳到該分類；長按品項可編輯（調整順序：⚙️ → 調整分類順序）</div>';
 
   for(var m=0;m<state.categories.length;m++){
     var cat = state.categories[m];
@@ -885,6 +887,10 @@ function openItemModal(id, presetCat){
 
   var it = null;
   if(!isNew){ for(var k=0;k<state.items.length;k++){ if(state.items[k].id===id){ it=state.items[k]; break; } } }
+  document.getElementById("f-name-label").textContent = isNew ? "品名（可一次輸入多個）" : "品名";
+  var hint = document.getElementById("f-name-hint");
+  hint.textContent = isNew ? "多個品項用 . - 、 。 分隔，例：麵條.米飯.米粉" : "";
+  hint.style.display = isNew ? "block" : "none";
   document.getElementById("f-name").value = it ? it.name : "";
   document.getElementById("f-unit").value = it ? it.unit : "";
   document.getElementById("f-stock").value = it ? fmt(it.stock) : "0";
@@ -908,9 +914,15 @@ function openCatModal(id){
   setTimeout(function(){ document.getElementById("cf-name").focus(); }, 50);
 }
 
+function splitNames(s){
+  var parts = String(s).split(/[.\-－、。\n\r]+/);
+  var out = [];
+  for(var i=0;i<parts.length;i++){ var p = parts[i].trim(); if(p) out.push(p); }
+  return out;
+}
 function saveItem(){
-  var name = document.getElementById("f-name").value.trim();
-  if(!name){ toast("請輸入品名", true); return; }
+  var rawName = document.getElementById("f-name").value.trim();
+  if(!rawName){ toast("請輸入品名", true); return; }
   var unit = document.getElementById("f-unit").value.trim();
   var stock = parseQty(document.getElementById("f-stock").value);
   var target = parseQty(document.getElementById("f-target").value);
@@ -921,14 +933,20 @@ function saveItem(){
     for(var i=0;i<state.items.length;i++){
       if(state.items[i].id===editingItemId){
         var it = state.items[i];
-        it.name=name; it.unit=unit; it.stock=stock; it.target=target; it.note=note; it.estTarget=est; it.categoryId=catId;
+        it.name=rawName; it.unit=unit; it.stock=stock; it.target=target; it.note=note; it.estTarget=est; it.categoryId=catId;
         break;
       }
     }
+    save(); closeModals(); render(); toast("已儲存");
   }else{
-    state.items.push({ id:uid(), categoryId:catId, name:name, unit:unit, stock:stock, target:target, note:note, estTarget:est });
+    var names = splitNames(rawName);
+    if(!names.length){ toast("請輸入品名", true); return; }
+    for(var j=0;j<names.length;j++){
+      state.items.push({ id:uid(), categoryId:catId, name:names[j], unit:unit, stock:stock, target:target, note:note, estTarget:est });
+    }
+    save(); closeModals(); render();
+    toast(names.length > 1 ? ("已新增 "+names.length+" 個品項") : "已儲存");
   }
-  save(); closeModals(); render(); toast("已儲存");
 }
 function deleteItem(){
   if(!editingItemId) return;
@@ -1091,6 +1109,63 @@ function onDocMouseUp(){
   if(sortDragRow) finishSortDrag();
 }
 
+/* ---------- 全部品項：長按品項進入編輯 ---------- */
+var editPress = null;
+
+function editRowFromEl(t){
+  while(t && t !== document.body){
+    if(t.classList && t.classList.contains("allrow")) return t;
+    t = t.parentNode;
+  }
+  return null;
+}
+function onRowTouchStart(e){
+  if(e.touches && e.touches.length !== 1) return;
+  var t = e.target;
+  if(t.closest && t.closest("button,input,select,textarea")) return;
+  var row = editRowFromEl(t);
+  if(!row) return;
+  var id = row.getAttribute("data-id");
+  if(!id) return;
+  editPress = { id:id, y:e.touches[0].clientY, timer:null };
+  editPress.timer = setTimeout(fireEditPress, 500);
+}
+function onRowTouchMove(e){
+  if(editPress && Math.abs(e.touches[0].clientY - editPress.y) > 10){
+    clearTimeout(editPress.timer); editPress = null;
+  }
+}
+function onRowTouchEnd(){
+  if(editPress){ clearTimeout(editPress.timer); editPress = null; }
+}
+function onRowMouseDown(e){
+  if(e.button !== 0) return;
+  var t = e.target;
+  if(t.closest && t.closest("button,input,select,textarea")) return;
+  var row = editRowFromEl(t);
+  if(!row) return;
+  var id = row.getAttribute("data-id");
+  if(!id) return;
+  editPress = { id:id, y:e.clientY, timer:null };
+  editPress.timer = setTimeout(fireEditPress, 500);
+}
+function onRowDocMouseMove(e){
+  if(editPress && Math.abs(e.clientY - editPress.y) > 10){
+    clearTimeout(editPress.timer); editPress = null;
+  }
+}
+function onRowDocMouseUp(){
+  if(editPress){ clearTimeout(editPress.timer); editPress = null; }
+}
+function fireEditPress(){
+  var id = editPress && editPress.id;
+  editPress = null;
+  if(!id) return;
+  try{ window.getSelection && window.getSelection().removeAllRanges(); }catch(err){}
+  try{ navigator.vibrate && navigator.vibrate(15); }catch(err){}
+  openItemModal(id);
+}
+
 function restoreSeed(){
   if(!confirm("將還原成範例資料，目前所有變更都會消失，確定嗎？")) return;
   state = seed();
@@ -1194,6 +1269,15 @@ function init(){
   sl.addEventListener("mousedown", onSortMouseDown);
   document.addEventListener("mousemove", onDocMouseMove);
   document.addEventListener("mouseup", onDocMouseUp);
+
+  var vw = document.getElementById("view");
+  vw.addEventListener("touchstart", onRowTouchStart, { passive:false });
+  vw.addEventListener("touchmove", onRowTouchMove);
+  vw.addEventListener("touchend", onRowTouchEnd);
+  vw.addEventListener("touchcancel", onRowTouchEnd);
+  vw.addEventListener("mousedown", onRowMouseDown);
+  document.addEventListener("mousemove", onRowDocMouseMove);
+  document.addEventListener("mouseup", onRowDocMouseUp);
 
   render();
 }
