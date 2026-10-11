@@ -219,7 +219,10 @@ input.stock.sm{width:60px; height:44px; font-size:19px; border-radius:12px}
 .batch-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:8px}
 .batch-count{font-size:13px; color:var(--muted)}
 .batch-list{max-height:42vh; overflow-y:auto; border:1px solid var(--line); border-radius:12px; padding:0 10px; background:var(--bg)}
-.batchrow{display:flex; align-items:center; gap:10px; font-size:16px; color:var(--text); padding:10px 0; border-bottom:1px solid var(--line); margin:0}
+.batchrow{display:flex; align-items:center; gap:10px; font-size:16px; color:var(--text); padding:10px 8px; border-bottom:1px solid var(--line); margin:0; border-radius:10px;
+  user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
+  transition:transform .12s, box-shadow .12s, background .12s;}
+.batchrow.drag-active{background:var(--card); box-shadow:0 10px 24px rgba(0,0,0,.3); outline:2px solid var(--primary); position:relative; z-index:20;}
 .batchrow:last-child{border-bottom:none}
 .batch-empty{font-size:14px; color:var(--muted); padding:14px 0; text-align:center}
 .batch-del{
@@ -975,24 +978,32 @@ function openCatModal(id){
   document.getElementById("cf-del").className = isNew ? "danger hidden" : "danger";
 
   var box = document.getElementById("cf-batch");
-  var list = document.getElementById("cf-items");
   if(isNew){
     box.className = "batch hidden";
-    list.innerHTML = "";
+    document.getElementById("cf-items").innerHTML = "";
   }else{
-    var items = [];
-    for(var k=0;k<state.items.length;k++){ if(state.items[k].categoryId === id) items.push(state.items[k]); }
-    var html = "";
-    for(var j=0;j<items.length;j++){
-      html += '<label class="batchrow"><input type="checkbox" class="cf-item" value="'+items[j].id+'"><span>'+esc(items[j].name)+'</span></label>';
-    }
-    list.innerHTML = items.length ? html : '<div class="batch-empty">此分類尚無品項</div>';
-    document.getElementById("cf-all").checked = false;
     box.className = "batch";
-    updateCfCount();
+    renderCatBatch(id);
   }
   document.getElementById("catModal").className = "modal";
   setTimeout(function(){ document.getElementById("cf-name").focus(); }, 50);
+}
+function renderCatBatch(id, checkedIds){
+  var list = document.getElementById("cf-items");
+  var items = [];
+  for(var k=0;k<state.items.length;k++){ if(state.items[k].categoryId === id) items.push(state.items[k]); }
+  var checked = {};
+  if(checkedIds){ for(var c=0;c<checkedIds.length;c++){ checked[checkedIds[c]] = true; } }
+  var html = "";
+  for(var j=0;j<items.length;j++){
+    var ck = checked[items[j].id] ? ' checked' : '';
+    html += '<label class="batchrow" data-id="'+items[j].id+'"><input type="checkbox" class="cf-item" value="'+items[j].id+'"'+ck+'><span>'+esc(items[j].name)+'</span></label>';
+  }
+  list.innerHTML = items.length ? html : '<div class="batch-empty">此分類尚無品項</div>';
+  var allChecked = items.length > 0;
+  for(var a=0;a<items.length;a++){ if(!checked[items[a].id]){ allChecked = false; break; } }
+  document.getElementById("cf-all").checked = allChecked;
+  updateCfCount();
 }
 function cfItemBoxes(){
   if(!document.querySelectorAll) return [];
@@ -1018,6 +1029,104 @@ function deleteSelected(){
   for(var n=0;n<state.items.length;n++){ if(!set[state.items[n].id]) out.push(state.items[n]); }
   state.items = out;
   save(); closeModals(); render(); toast("已刪除 "+ids.length+" 個品項");
+}
+
+/* ---------- 編輯分類：長按拖曳調整品項順序 ---------- */
+var cfPress = null, cfDragRow = null, cfSuppressClick = false;
+
+function cfRowFromEl(t){
+  while(t && t !== document.body){
+    if(t.classList && t.classList.contains("batchrow")) return t;
+    t = t.parentNode;
+  }
+  return null;
+}
+function activateCfDrag(){
+  if(!cfPress) return;
+  cfDragRow = cfPress.row;
+  cfPress = null;
+  cfDragRow.classList.add("drag-active");
+  try{ window.getSelection && window.getSelection().removeAllRanges(); }catch(err){}
+  try{ navigator.vibrate && navigator.vibrate(15); }catch(err){}
+}
+function reorderCfByY(y){
+  var list = document.getElementById("cf-items");
+  var lr = list.getBoundingClientRect();
+  if(y < lr.top + 26) list.scrollTop -= 8;
+  else if(y > lr.bottom - 26) list.scrollTop += 8;
+  var rows = Array.prototype.slice.call(list.querySelectorAll(".batchrow"));
+  var ref = null;
+  for(var i=0;i<rows.length;i++){
+    if(rows[i] === cfDragRow) continue;
+    var r = rows[i].getBoundingClientRect();
+    if(y < r.top + r.height/2){ ref = rows[i]; break; }
+  }
+  if(ref) list.insertBefore(cfDragRow, ref);
+  else list.appendChild(cfDragRow);
+}
+function applyItemOrder(catId, newOrder){
+  var byId = {}, count = 0;
+  for(var i=0;i<state.items.length;i++){ if(state.items[i].categoryId === catId){ byId[state.items[i].id] = state.items[i]; count++; } }
+  var seq = [];
+  for(var k=0;k<newOrder.length;k++){ if(byId[newOrder[k]]) seq.push(byId[newOrder[k]]); }
+  if(seq.length !== count) return false;
+  var idx = 0, out = [];
+  for(var j=0;j<state.items.length;j++){
+    if(state.items[j].categoryId === catId){ out.push(seq[idx++]); } else { out.push(state.items[j]); }
+  }
+  state.items = out;
+  return true;
+}
+function finishCfDrag(){
+  cfDragRow.classList.remove("drag-active");
+  var list = document.getElementById("cf-items");
+  var rows = Array.prototype.slice.call(list.querySelectorAll(".batchrow"));
+  var newOrder = rows.map(function(r){ return r.getAttribute("data-id"); });
+  var checkedIds = [];
+  for(var i=0;i<rows.length;i++){
+    var cb = rows[i].querySelector ? rows[i].querySelector(".cf-item") : null;
+    if(cb && cb.checked) checkedIds.push(cb.getAttribute("value"));
+  }
+  cfDragRow = null;
+  cfSuppressClick = true;
+  setTimeout(function(){ cfSuppressClick = false; }, 400);
+  if(applyItemOrder(editingCatId, newOrder)){ save(); toast("已調整順序"); }
+  renderCatBatch(editingCatId, checkedIds);
+}
+function onCfTouchStart(e){
+  if(e.touches && e.touches.length !== 1) return;
+  var t = e.target;
+  if(t.closest && t.closest("input,button")) return;
+  var row = cfRowFromEl(t);
+  if(!row) return;
+  cfPress = { row:row, y:e.touches[0].clientY, timer:null };
+  cfPress.timer = setTimeout(activateCfDrag, 300);
+}
+function onCfTouchMove(e){
+  if(cfDragRow){ e.preventDefault(); reorderCfByY(e.touches[0].clientY); return; }
+  if(cfPress && Math.abs(e.touches[0].clientY - cfPress.y) > 10){ clearTimeout(cfPress.timer); cfPress = null; }
+}
+function onCfTouchEnd(){
+  if(cfPress){ clearTimeout(cfPress.timer); cfPress = null; }
+  if(cfDragRow) finishCfDrag();
+}
+function onCfMouseDown(e){
+  if(e.button !== 0) return;
+  var t = e.target;
+  if(t.closest && t.closest("input,button")) return;
+  var row = cfRowFromEl(t);
+  if(!row) return;
+  e.preventDefault();
+  cfPress = { row:row, y:e.clientY, timer:null };
+  cfPress.timer = setTimeout(activateCfDrag, 300);
+}
+function onCfDocMouseMove(e){
+  if(cfDragRow){ e.preventDefault(); reorderCfByY(e.clientY); return; }
+  if(cfPress && Math.abs(e.clientY - cfPress.y) > 10){ clearTimeout(cfPress.timer); cfPress = null; }
+}
+function onCfDocMouseUp(){
+  if(cfPress){ clearTimeout(cfPress.timer); cfPress = null; }
+  if(cfDragRow) finishCfDrag();
 }
 
 function splitNames(s){
@@ -1412,6 +1521,16 @@ function init(){
   vw.addEventListener("mousedown", onRowMouseDown);
   document.addEventListener("mousemove", onRowDocMouseMove);
   document.addEventListener("mouseup", onRowDocMouseUp);
+
+  var cfi = document.getElementById("cf-items");
+  cfi.addEventListener("touchstart", onCfTouchStart, { passive:false });
+  cfi.addEventListener("touchmove", onCfTouchMove, { passive:false });
+  cfi.addEventListener("touchend", onCfTouchEnd);
+  cfi.addEventListener("touchcancel", onCfTouchEnd);
+  cfi.addEventListener("mousedown", onCfMouseDown);
+  cfi.addEventListener("click", function(e){ if(cfSuppressClick){ e.preventDefault(); e.stopPropagation(); } }, true);
+  document.addEventListener("mousemove", onCfDocMouseMove);
+  document.addEventListener("mouseup", onCfDocMouseUp);
 
   render();
 }
