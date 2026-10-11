@@ -99,6 +99,30 @@ input.stock:focus{outline:2px solid var(--primary); border-color:var(--primary)}
 .empty{color:var(--muted); text-align:center; padding:30px 10px}
 
 /* 全部品項頁 */
+.chips{display:flex; flex-wrap:wrap; gap:8px; padding:2px 0 8px}
+.chip{
+  border:1px solid var(--line); background:var(--card); color:var(--text);
+  border-radius:999px; padding:9px 14px; font-size:15px; font-weight:600; cursor:grab;
+  touch-action:pan-y; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
+}
+.chip:active{background:var(--chip)}
+.allhint{font-size:12px; color:var(--muted); margin:0 2px 12px}
+.cat-section{margin-bottom:10px}
+.cat-sec-head{
+  display:flex; align-items:center; gap:8px; position:sticky; top:131px; z-index:6;
+  background:var(--bg); padding:8px 2px; border-bottom:2px solid var(--line);
+  touch-action:none; cursor:grab; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
+}
+.cat-sec-name{font-size:17px; font-weight:800; flex:1; min-width:0; word-break:break-word}
+.cat-sec-tools{display:flex; gap:6px; flex:0 0 auto}
+.mini-add,.mini-edit{
+  border:1px solid var(--line); background:var(--card); color:var(--text);
+  border-radius:10px; padding:7px 10px; font-size:13px; font-weight:700; cursor:pointer;
+}
+.mini-edit{padding:7px 9px}
+.dragging{opacity:.55}
+
+/* 全部品項頁 */
 .all-cat{
   font-size:16px; font-weight:800; margin:16px 2px 6px; padding-bottom:6px;
   border-bottom:2px solid var(--line); position:sticky; top:131px; background:var(--bg);
@@ -213,8 +237,6 @@ input.stock.sm{width:60px; height:44px; font-size:19px; border-radius:12px}
 <div id="menuOverlay" class="overlay hidden" data-action="close-menu"></div>
 <div id="menuSheet" class="sheet hidden">
   <button data-action="open-cat-new">➕ 新增分類</button>
-  <button data-action="open-cat-edit">✏️ 編輯目前分類</button>
-  <button data-action="delete-cat">🗑️ 刪除目前分類</button>
   <button data-action="restore">♻️ 還原範例資料</button>
   <hr>
   <button data-action="export-json">⬇️ 匯出 JSON（備份）</button>
@@ -249,6 +271,7 @@ input.stock.sm{width:60px; height:44px; font-size:19px; border-radius:12px}
     <label>圖示（可貼 emoji）<input id="cf-icon" placeholder="📦" maxlength="4" autocomplete="off"></label>
     <label>名稱<input id="cf-name" autocomplete="off"></label>
     <div class="modal-actions">
+      <button data-action="delete-cat" class="danger hidden" id="cf-del">刪除</button>
       <button data-action="close-modal">取消</button>
       <button data-action="save-cat" class="primary">儲存</button>
     </div>
@@ -466,26 +489,14 @@ function totalNeeded(){
 
 /* ---------- 渲染 ---------- */
 function render(){
-  if(currentTab !== ORDER_TAB && currentTab !== ALL_TAB && !catById(currentTab)){
-    currentTab = state.categories.length ? state.categories[0].id : ORDER_TAB;
-  }
   renderTabs();
   if(currentTab === ORDER_TAB) renderOrder();
-  else if(currentTab === ALL_TAB) renderAll();
-  else renderCategory(catById(currentTab));
+  else { currentTab = ALL_TAB; renderAll(); }
 }
 function renderTabs(){
   var nav = document.getElementById("tabs");
-  var html = "";
-  for(var i=0;i<state.categories.length;i++){
-    var c = state.categories[i];
-    var n = neededItemsIn(c.id).length;
-    html += '<button class="tab'+(currentTab===c.id?" active":"")+'" data-action="tab" data-id="'+c.id+'">'
-      + esc(c.icon) + ' ' + esc(c.name)
-      + (n>0 ? '<span class="badge">'+n+'</span>' : '')
-      + '</button>';
-  }
   var tn = totalNeeded();
+  var html = "";
   html += '<button class="tab'+(currentTab===ALL_TAB?" active":"")+'" data-action="tab" data-id="'+ALL_TAB+'">📦 全部品項</button>';
   html += '<button class="tab'+(currentTab===ORDER_TAB?" active":"")+'" data-action="tab" data-id="'+ORDER_TAB+'">📋 補貨清單'
     + (tn>0 ? '<span class="badge">'+tn+'</span>' : '') + '</button>';
@@ -571,16 +582,34 @@ function allRow(it){
 }
 function renderAll(){
   var view = document.getElementById("view");
-  var html = '<div class="cat-head"><h2>📦 全部品項</h2><span class="sub">'
-    + state.items.length + ' 項・一頁直接調整庫存</span></div>';
-  if(!state.items.length){ html += '<div class="empty">目前沒有品項</div>'; }
+  var html = "";
+  if(!state.categories.length){
+    view.innerHTML = '<div class="empty">目前沒有分類，請從 ⚙️ 設定新增分類</div>';
+    return;
+  }
+  html += '<div class="chips" id="chips">';
   for(var i=0;i<state.categories.length;i++){
-    var cat = state.categories[i];
+    var c = state.categories[i];
+    html += '<button class="chip" data-action="jump" data-id="'+c.id+'">'+esc(c.icon)+' '+esc(c.name)+'</button>';
+  }
+  html += '</div>';
+  html += '<div class="allhint">點標籤可跳到該分類；長按標籤（或分類名稱）可拖曳調整順序</div>';
+
+  for(var m=0;m<state.categories.length;m++){
+    var cat = state.categories[m];
     var items = [];
     for(var k=0;k<state.items.length;k++){ if(state.items[k].categoryId===cat.id) items.push(state.items[k]); }
-    html += '<div class="all-cat">'+esc(cat.icon)+' '+esc(cat.name)+'</div>';
-    if(!items.length){ html += '<div class="all-empty">（無品項）</div>'; continue; }
+    html += '<section class="cat-section" data-cat="'+cat.id+'">';
+    html +=   '<div class="cat-sec-head" data-cat="'+cat.id+'">'
+           +     '<span class="cat-sec-name">'+esc(cat.icon)+' '+esc(cat.name)+'</span>'
+           +     '<span class="cat-sec-tools">'
+           +       '<button class="mini-add" data-action="add-item-cat" data-id="'+cat.id+'">＋ 新增品項</button>'
+           +       '<button class="mini-edit" data-action="open-cat" data-id="'+cat.id+'">✏️</button>'
+           +     '</span>'
+           +   '</div>';
+    if(!items.length){ html += '<div class="all-empty">（尚無品項）</div>'; }
     for(var j=0;j<items.length;j++){ html += allRow(items[j]); }
+    html += '</section>';
   }
   view.innerHTML = html;
 }
@@ -774,7 +803,7 @@ function importJson(file){
       }
       if(!confirm("匯入後將覆蓋目前所有資料，確定要繼續嗎？")) return;
       state = data;
-      currentTab = state.categories.length ? state.categories[0].id : ORDER_TAB;
+      currentTab = ALL_TAB;
       save(); render(); toast("已匯入資料");
     }catch(e){
       toast("匯入失敗：檔案格式不正確", true);
@@ -813,7 +842,7 @@ function openMenu(){ document.getElementById("menuOverlay").className="overlay";
 function closeMenu(){ document.getElementById("menuOverlay").className="overlay hidden"; document.getElementById("menuSheet").className="sheet hidden"; }
 function closeModals(){ ["itemModal","catModal","copyModal"].forEach(function(id){ document.getElementById(id).className="modal hidden"; }); }
 
-function openItemModal(id){
+function openItemModal(id, presetCat){
   editingItemId = id || null;
   var isNew = !id;
   document.getElementById("itemModalTitle").textContent = isNew ? "新增品項" : "編輯品項";
@@ -832,7 +861,7 @@ function openItemModal(id){
   document.getElementById("f-target").value = it ? fmt(it.target) : "0";
   document.getElementById("f-note").value = it ? it.note : "";
   document.getElementById("f-est").checked = it ? !!it.estTarget : false;
-  sel.value = it ? it.categoryId : (catById(currentTab) ? currentTab : (state.categories[0] && state.categories[0].id));
+  sel.value = it ? it.categoryId : (presetCat || (state.categories[0] && state.categories[0].id));
   document.getElementById("f-del").className = isNew ? "danger hidden" : "danger";
   document.getElementById("itemModal").className = "modal";
   setTimeout(function(){ document.getElementById("f-name").focus(); }, 50);
@@ -844,6 +873,7 @@ function openCatModal(id){
   var cat = isNew ? null : catById(id);
   document.getElementById("cf-icon").value = cat ? cat.icon : "📦";
   document.getElementById("cf-name").value = cat ? cat.name : "";
+  document.getElementById("cf-del").className = isNew ? "danger hidden" : "danger";
   document.getElementById("catModal").className = "modal";
   setTimeout(function(){ document.getElementById("cf-name").focus(); }, 50);
 }
@@ -886,15 +916,13 @@ function saveCat(){
     var c = catById(editingCatId);
     if(c){ c.name=name; c.icon=icon; }
   }else{
-    var id = uid();
-    state.categories.push({ id:id, name:name, icon:icon });
-    currentTab = id;
+    state.categories.push({ id:uid(), name:name, icon:icon });
   }
   save(); closeModals(); render(); toast("已儲存");
 }
 function deleteCat(){
-  var cat = catById(currentTab);
-  if(!cat){ toast("請先切到要刪除的分類", true); return; }
+  var cat = catById(editingCatId);
+  if(!cat){ toast("找不到分類", true); return; }
   var n = 0;
   for(var i=0;i<state.items.length;i++){ if(state.items[i].categoryId===cat.id) n++; }
   var msg = n>0 ? ("刪除分類「"+cat.name+"」將連同 "+n+" 個品項一起刪除，確定嗎？")
@@ -906,13 +934,12 @@ function deleteCat(){
   var cats = [];
   for(var k=0;k<state.categories.length;k++){ if(state.categories[k].id!==cat.id) cats.push(state.categories[k]); }
   state.categories = cats;
-  currentTab = state.categories.length ? state.categories[0].id : ORDER_TAB;
-  save(); closeMenu(); render(); toast("已刪除分類");
+  save(); closeModals(); render(); toast("已刪除分類");
 }
 function restoreSeed(){
   if(!confirm("將還原成範例資料，目前所有變更都會消失，確定嗎？")) return;
   state = seed();
-  currentTab = state.categories.length ? state.categories[0].id : ORDER_TAB;
+  currentTab = ALL_TAB;
   save(); closeMenu(); render(); toast("已還原範例資料");
 }
 
@@ -920,12 +947,17 @@ function restoreSeed(){
 function findItem(id){ for(var i=0;i<state.items.length;i++){ if(state.items[i].id===id) return state.items[i]; } return null; }
 
 function onClick(e){
+  if(suppressClick){ suppressClick = false; return; }
   var el = e.target.closest("[data-action]");
   if(!el) return;
   var a = el.getAttribute("data-action");
   var id = el.getAttribute("data-id");
   switch(a){
     case "tab": currentTab = id; closeMenu(); render(); window.scrollTo({top:0}); break;
+    case "jump":
+      var sec = document.querySelector('.cat-section[data-cat="'+id+'"]');
+      if(sec){ window.scrollTo({ top: sec.getBoundingClientRect().top + window.pageYOffset - 138, behavior:"smooth" }); }
+      break;
     case "step":
       var it = findItem(id);
       if(it){ it.stock = Math.max(0, Math.round((it.stock + parseFloat(el.getAttribute("data-delta")))*2)/2); save(); render(); }
@@ -936,11 +968,12 @@ function onClick(e){
       break;
     case "edit-item": openItemModal(id); break;
     case "add-item": openItemModal(null); break;
+    case "add-item-cat": openItemModal(null, id); break;
+    case "open-cat": openCatModal(id); break;
     case "open-menu": openMenu(); break;
     case "close-menu": closeMenu(); break;
     case "open-cat-new": closeMenu(); openCatModal(null); break;
-    case "open-cat-edit": closeMenu(); if(catById(currentTab)) openCatModal(currentTab); else toast("請先切到某個分類頁再編輯", true); break;
-    case "delete-cat": closeMenu(); deleteCat(); break;
+    case "delete-cat": deleteCat(); break;
     case "restore": restoreSeed(); break;
     case "export-json": closeMenu(); exportJson(); break;
     case "import-json": closeMenu(); document.getElementById("importFile").click(); break;
@@ -956,6 +989,80 @@ function onClick(e){
     case "download-word": downloadWord(); break;
     case "print-order": printOrder(); break;
   }
+}
+
+/* ---------- 拖曳排序 ---------- */
+var press = null, drag = null, suppressClick = false;
+
+function onPointerDown(e){
+  if(e.pointerType === "mouse" && e.button !== 0) return;
+  var chip = e.target.closest && e.target.closest(".chip");
+  var head = e.target.closest && e.target.closest(".cat-sec-head");
+  if(chip){
+    press = { type:"chip", el:chip, x:e.clientX, y:e.clientY, id:e.pointerId };
+  }else if(head && !e.target.closest("button")){
+    press = { type:"section", el:head.closest(".cat-section"), x:e.clientX, y:e.clientY, id:e.pointerId };
+  }else{
+    return;
+  }
+  press.timer = setTimeout(function(){ activateDrag(); }, 230);
+}
+function onPointerMove(e){
+  if(press && !drag){
+    var dx = e.clientX - press.x, dy = e.clientY - press.y;
+    if(Math.abs(dx) > 10 || Math.abs(dy) > 10){ clearTimeout(press.timer); press = null; }
+    return;
+  }
+  if(!drag) return;
+  e.preventDefault();
+  var selector = drag.type === "chip" ? ".chip" : ".cat-section";
+  var container = drag.el.parentNode;
+  var others = Array.prototype.slice.call(container.querySelectorAll(selector)).filter(function(n){ return n !== drag.el; });
+  var pos = drag.type === "chip" ? e.clientX : e.clientY;
+  var ref = null;
+  for(var i=0;i<others.length;i++){
+    var r = others[i].getBoundingClientRect();
+    var mid = drag.type === "chip" ? (r.left + r.width/2) : (r.top + r.height/2);
+    if(pos < mid){ ref = others[i]; break; }
+  }
+  if(ref) container.insertBefore(drag.el, ref);
+  else container.appendChild(drag.el);
+}
+function onPointerUp(){
+  clearTimeout(press && press.timer);
+  press = null;
+  if(drag) endDrag();
+}
+function activateDrag(){
+  if(!press) return;
+  var type = press.type, el = press.el, pid = press.id;
+  if(el.parentNode === null){ press = null; return; }
+  drag = { type:type, el:el, pid:pid };
+  suppressClick = true;
+  el.classList.add("dragging");
+  try{ el.setPointerCapture(pid); }catch(err){}
+  window.getSelection && window.getSelection().removeAllRanges();
+  press = null;
+}
+function endDrag(){
+  var selector = drag.type === "chip" ? ".chip" : ".cat-section";
+  var container = drag.el.parentNode;
+  drag.el.classList.remove("dragging");
+  try{ drag.el.releasePointerCapture && drag.el.releasePointerCapture(drag.pid); }catch(err){}
+  var nodes = Array.prototype.slice.call(container.querySelectorAll(selector));
+  var key = drag.type === "chip" ? "data-id" : "data-cat";
+  var order = nodes.map(function(n){ return n.getAttribute(key); });
+  var map = {};
+  for(var i=0;i<state.categories.length;i++){ map[state.categories[i].id] = state.categories[i]; }
+  var newCats = [];
+  for(var j=0;j<order.length;j++){ if(map[order[j]]) newCats.push(map[order[j]]); }
+  if(newCats.length === state.categories.length){
+    state.categories = newCats;
+    save();
+  }
+  drag = null;
+  setTimeout(function(){ suppressClick = false; }, 400);
+  render();
 }
 
 function onFocusIn(e){
@@ -983,7 +1090,7 @@ function init(){
   applyTheme();
   state = load();
   if(!state){ state = seed(); save(); }
-  currentTab = state.categories.length ? state.categories[0].id : ORDER_TAB;
+  currentTab = ALL_TAB;
 
   document.getElementById("importFile").addEventListener("change", function(ev){
     var f = ev.target.files && ev.target.files[0];
@@ -994,6 +1101,10 @@ function init(){
   document.addEventListener("focusin", onFocusIn);
   document.addEventListener("change", onChange);
   document.addEventListener("keydown", onKeydown);
+  document.addEventListener("pointerdown", onPointerDown);
+  document.addEventListener("pointermove", onPointerMove);
+  document.addEventListener("pointerup", onPointerUp);
+  document.addEventListener("pointercancel", onPointerUp);
 
   render();
 }
