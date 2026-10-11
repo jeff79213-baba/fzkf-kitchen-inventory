@@ -215,6 +215,19 @@ input.stock.sm{width:60px; height:44px; font-size:19px; border-radius:12px}
 .modal-actions button.danger{background:var(--danger-bg); color:var(--danger)}
 .copyhint{font-size:14px; color:var(--muted); margin:0 0 10px}
 .fieldhint{font-size:13px; color:var(--muted); margin:-6px 0 12px; line-height:1.4}
+.batch{margin:4px 0 14px; border-top:1px solid var(--line); padding-top:12px}
+.batch-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:8px}
+.batch-count{font-size:13px; color:var(--muted)}
+.batch-list{max-height:42vh; overflow-y:auto; border:1px solid var(--line); border-radius:12px; padding:0 10px; background:var(--bg)}
+.batchrow{display:flex; align-items:center; gap:10px; font-size:16px; color:var(--text); padding:10px 0; border-bottom:1px solid var(--line); margin:0}
+.batchrow:last-child{border-bottom:none}
+.batch-empty{font-size:14px; color:var(--muted); padding:14px 0; text-align:center}
+.batch-del{
+  margin-top:10px; width:100%; padding:14px; border:none; border-radius:14px;
+  font-size:16px; font-weight:700; background:var(--danger-bg); color:var(--danger); cursor:pointer;
+}
+.batch-del:disabled{opacity:.45; cursor:default}
+.modal-card .batchrow input[type=checkbox]{display:inline-block; width:22px; height:22px; padding:0; margin:0; flex:0 0 auto}
 .copyarea{width:100%; height:38vh; padding:12px; font-size:13px; line-height:1.5; border:1px solid var(--line);
   border-radius:12px; background:var(--bg); color:var(--text); font-family:monospace; resize:vertical; margin-bottom:12px}
 .hidden{display:none !important}
@@ -290,6 +303,14 @@ input.stock.sm{width:60px; height:44px; font-size:19px; border-radius:12px}
     <h2 id="catModalTitle">新增分類</h2>
     <label>圖示（可貼 emoji）<input id="cf-icon" placeholder="📦" maxlength="4" autocomplete="off"></label>
     <label>名稱<input id="cf-name" autocomplete="off"></label>
+    <div id="cf-batch" class="batch hidden">
+      <div class="batch-head">
+        <label class="chk"><input type="checkbox" id="cf-all" data-role="cf-all"> 全選</label>
+        <span class="batch-count" id="cf-count">已選 0 項</span>
+      </div>
+      <div class="batch-list" id="cf-items"></div>
+      <button data-action="delete-selected" class="danger batch-del" id="cf-del-selected" disabled>刪除已選 (0)</button>
+    </div>
     <div class="modal-actions">
       <button data-action="delete-cat" class="danger hidden" id="cf-del">刪除</button>
       <button data-action="close-modal">取消</button>
@@ -333,6 +354,48 @@ var STORE_KEY = "fzkf-inventory-v1";
 var THEME_KEY = "fzkf-theme";
 var ORDER_TAB = "__order__";
 var ALL_TAB = "__all__";
+var DATA_VERSION = 2;
+
+var KITCHEN_STAPLES = [
+  ["沙拉油","瓶",1,1,"",false],
+  ["香油","瓶",1,1,"",false],
+  ["橄欖油","瓶",1,1,"",false],
+  ["醬油","瓶",1,1,"",false],
+  ["醬油膏","瓶",1,1,"",false],
+  ["蠔油","瓶",1,1,"",false],
+  ["白醋","瓶",1,1,"",false],
+  ["烏醋","瓶",1,1,"",false],
+  ["米酒","瓶",1,1,"",false],
+  ["味醂","瓶",1,1,"",false],
+  ["鹽巴","包",1,1,"",false],
+  ["砂糖","包",1,1,"",false],
+  ["二砂","包",1,1,"",false],
+  ["白胡椒粉","包",1,1,"",false],
+  ["黑胡椒粉","包",1,1,"",false],
+  ["五香粉","包",1,1,"",false],
+  ["味精","包",1,1,"",false],
+  ["雞粉","罐",1,1,"",false],
+  ["番茄醬","瓶",1,1,"",false],
+  ["沙茶醬","罐",1,1,"",false],
+  ["豆瓣醬","罐",1,1,"",false],
+  ["辣椒醬","瓶",1,1,"",false],
+  ["甜辣醬","瓶",1,1,"",false],
+  ["美乃滋","條",1,1,"",false],
+  ["蜂蜜","瓶",1,1,"",false],
+  ["太白粉","包",1,1,"",false],
+  ["玉米粉","包",1,1,"",false],
+  ["地瓜粉","包",1,1,"",false],
+  ["中筋麵粉","包",1,1,"",false],
+  ["蒜頭","包",1,1,"",false],
+  ["老薑","包",1,1,"",false],
+  ["青蔥","把",1,1,"",false],
+  ["辣椒","包",1,1,"",false],
+  ["滷包","包",1,1,"",false],
+  ["八角","包",1,1,"",false],
+  ["茶包","盒",1,1,"",false],
+  ["白芝麻","包",1,1,"",false],
+  ["黑芝麻","包",1,1,"",false]
+];
 
 var state = null;
 var currentTab = null;
@@ -470,46 +533,7 @@ function seed(){
       ["咖啡豆","包",7,7,"",false],
       ["糖包","包",2.5,2.5,"",false]
     ]],
-    ["🍚","柴米油鹽醬醋茶",[
-      ["沙拉油","瓶",1,1,"",false],
-      ["香油","瓶",1,1,"",false],
-      ["橄欖油","瓶",1,1,"",false],
-      ["醬油","瓶",1,1,"",false],
-      ["醬油膏","瓶",1,1,"",false],
-      ["蠔油","瓶",1,1,"",false],
-      ["白醋","瓶",1,1,"",false],
-      ["烏醋","瓶",1,1,"",false],
-      ["米酒","瓶",1,1,"",false],
-      ["味醂","瓶",1,1,"",false],
-      ["鹽巴","包",1,1,"",false],
-      ["砂糖","包",1,1,"",false],
-      ["二砂","包",1,1,"",false],
-      ["白胡椒粉","包",1,1,"",false],
-      ["黑胡椒粉","包",1,1,"",false],
-      ["五香粉","包",1,1,"",false],
-      ["味精","包",1,1,"",false],
-      ["雞粉","罐",1,1,"",false],
-      ["番茄醬","瓶",1,1,"",false],
-      ["沙茶醬","罐",1,1,"",false],
-      ["豆瓣醬","罐",1,1,"",false],
-      ["辣椒醬","瓶",1,1,"",false],
-      ["甜辣醬","瓶",1,1,"",false],
-      ["美乃滋","條",1,1,"",false],
-      ["蜂蜜","瓶",1,1,"",false],
-      ["太白粉","包",1,1,"",false],
-      ["玉米粉","包",1,1,"",false],
-      ["地瓜粉","包",1,1,"",false],
-      ["中筋麵粉","包",1,1,"",false],
-      ["蒜頭","包",1,1,"",false],
-      ["老薑","包",1,1,"",false],
-      ["青蔥","把",1,1,"",false],
-      ["辣椒","包",1,1,"",false],
-      ["滷包","包",1,1,"",false],
-      ["八角","包",1,1,"",false],
-      ["茶包","盒",1,1,"",false],
-      ["白芝麻","包",1,1,"",false],
-      ["黑芝麻","包",1,1,"",false]
-    ]]
+    ["🍚","柴米油鹽醬醋茶",KITCHEN_STAPLES]
   ];
   var categories = [], items = [];
   for(var i=0;i<defs.length;i++){
@@ -521,7 +545,7 @@ function seed(){
       items.push({ id:uid(), categoryId:cid, name:r[0], unit:r[1], stock:r[2], target:r[3], note:r[4], estTarget:r[5] });
     }
   }
-  return { version:1, categories:categories, items:items };
+  return { version:1, dataVersion:DATA_VERSION, categories:categories, items:items };
 }
 
 /* ---------- 主題 ---------- */
@@ -949,8 +973,51 @@ function openCatModal(id){
   document.getElementById("cf-icon").value = cat ? cat.icon : "📦";
   document.getElementById("cf-name").value = cat ? cat.name : "";
   document.getElementById("cf-del").className = isNew ? "danger hidden" : "danger";
+
+  var box = document.getElementById("cf-batch");
+  var list = document.getElementById("cf-items");
+  if(isNew){
+    box.className = "batch hidden";
+    list.innerHTML = "";
+  }else{
+    var items = [];
+    for(var k=0;k<state.items.length;k++){ if(state.items[k].categoryId === id) items.push(state.items[k]); }
+    var html = "";
+    for(var j=0;j<items.length;j++){
+      html += '<label class="batchrow"><input type="checkbox" class="cf-item" value="'+items[j].id+'"><span>'+esc(items[j].name)+'</span></label>';
+    }
+    list.innerHTML = items.length ? html : '<div class="batch-empty">此分類尚無品項</div>';
+    document.getElementById("cf-all").checked = false;
+    box.className = "batch";
+    updateCfCount();
+  }
   document.getElementById("catModal").className = "modal";
   setTimeout(function(){ document.getElementById("cf-name").focus(); }, 50);
+}
+function cfItemBoxes(){
+  if(!document.querySelectorAll) return [];
+  var nodes = document.querySelectorAll("#cf-items .cf-item");
+  return Array.prototype.slice.call(nodes);
+}
+function updateCfCount(){
+  var boxes = cfItemBoxes(), n = 0;
+  for(var i=0;i<boxes.length;i++){ if(boxes[i].checked) n++; }
+  var cnt = document.getElementById("cf-count");
+  if(cnt) cnt.textContent = "已選 " + n + " 項";
+  var btn = document.getElementById("cf-del-selected");
+  if(btn){ btn.textContent = "刪除已選 (" + n + ")"; btn.disabled = (n === 0); }
+}
+function deleteSelected(){
+  var boxes = cfItemBoxes(), ids = [];
+  for(var i=0;i<boxes.length;i++){ if(boxes[i].checked) ids.push(boxes[i].value); }
+  if(!ids.length){ toast("請先勾選要刪除的品項", true); return; }
+  if(!confirm("確定刪除已選的 "+ids.length+" 個品項嗎？")) return;
+  var set = {};
+  for(var m=0;m<ids.length;m++){ set[ids[m]] = true; }
+  var out = [];
+  for(var n=0;n<state.items.length;n++){ if(!set[state.items[n].id]) out.push(state.items[n]); }
+  state.items = out;
+  save(); closeModals(); render(); toast("已刪除 "+ids.length+" 個品項");
 }
 
 function splitNames(s){
@@ -1212,6 +1279,25 @@ function restoreSeed(){
   save(); closeMenu(); render(); toast("已還原範例資料");
 }
 
+/* ---------- 資料版本升級（一次性補入預設材料） ---------- */
+function mergeStaplePatch(){
+  var cat = null;
+  for(var i=0;i<state.categories.length;i++){ if(state.categories[i].name === "柴米油鹽醬醋茶"){ cat = state.categories[i]; break; } }
+  if(!cat){ cat = { id:uid(), name:"柴米油鹽醬醋茶", icon:"🍚" }; state.categories.push(cat); }
+  var existing = {};
+  for(var k=0;k<state.items.length;k++){ if(state.items[k].categoryId === cat.id){ existing[state.items[k].name] = true; } }
+  for(var j=0;j<KITCHEN_STAPLES.length;j++){
+    var r = KITCHEN_STAPLES[j];
+    if(existing[r[0]]) continue;
+    state.items.push({ id:uid(), categoryId:cat.id, name:r[0], unit:r[1], stock:r[2], target:r[3], note:r[4], estTarget:r[5] });
+  }
+}
+function applyMigrations(){
+  var cur = state.dataVersion || 0;
+  if(cur < 2){ mergeStaplePatch(); }
+  state.dataVersion = DATA_VERSION;
+}
+
 /* ---------- 事件 ---------- */
 function findItem(id){ for(var i=0;i<state.items.length;i++){ if(state.items[i].id===id) return state.items[i]; } return null; }
 
@@ -1238,6 +1324,7 @@ function onClick(e){
     case "add-item": openItemModal(null); break;
     case "add-item-cat": openItemModal(null, id); break;
     case "open-cat": openCatModal(id); break;
+    case "delete-selected": deleteSelected(); break;
     case "open-menu": openMenu(); break;
     case "close-menu": closeMenu(); break;
     case "open-cat-new": closeMenu(); openCatModal(null); break;
@@ -1273,6 +1360,13 @@ function onChange(e){
   var t = e.target;
   if(!t || !t.getAttribute) return;
   var role = t.getAttribute("data-role");
+  if(role === "cf-all"){
+    var boxes = cfItemBoxes();
+    for(var i=0;i<boxes.length;i++){ boxes[i].checked = t.checked; }
+    updateCfCount();
+    return;
+  }
+  if(t.classList && t.classList.contains("cf-item")){ updateCfCount(); return; }
   if(role !== "stock" && role !== "target") return;
   var it = findItem(t.getAttribute("data-id"));
   if(!it) return;
@@ -1288,6 +1382,7 @@ function init(){
   applyTheme();
   state = load();
   if(!state){ state = seed(); save(); }
+  else if((state.dataVersion || 0) < DATA_VERSION){ applyMigrations(); save(); }
   currentTab = ALL_TAB;
 
   document.getElementById("importFile").addEventListener("change", function(ev){
