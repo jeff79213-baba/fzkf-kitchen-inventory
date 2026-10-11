@@ -122,7 +122,15 @@ input.stock:focus{outline:2px solid var(--primary); border-color:var(--primary)}
 
 /* 調整分類順序 */
 #sortList{display:flex; flex-direction:column; gap:8px; margin:4px 0 14px; max-height:58vh; overflow-y:auto}
-.sortrow{display:flex; align-items:center; gap:10px}
+.sortrow{
+  display:flex; align-items:center; gap:10px; padding:4px; border-radius:16px;
+  background:var(--card); transition:transform .12s, box-shadow .12s, background .12s;
+  user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
+}
+.sortrow.drag-active{
+  background:var(--bg); box-shadow:0 10px 24px rgba(0,0,0,.3);
+  outline:2px solid var(--primary); transform:scale(1.03); position:relative; z-index:20;
+}
 .sortbtn{
   width:56px; height:56px; flex:0 0 auto; border:1px solid var(--line); background:var(--chip);
   color:var(--text); border-radius:14px; font-size:22px; font-weight:800; cursor:pointer;
@@ -291,7 +299,7 @@ input.stock.sm{width:60px; height:44px; font-size:19px; border-radius:12px}
 <div id="sortModal" class="modal hidden">
   <div class="modal-card">
     <h2>調整分類順序</h2>
-    <p class="copyhint">用 ↑ ↓ 把分類排到想要的順序，完成後套用。</p>
+    <p class="copyhint">用 ↑ ↓ 或長按整列上下拖曳來調整順序，完成後套用。</p>
     <div id="sortList" class="sortlist"></div>
     <div class="modal-actions">
       <button data-action="close-modal">取消</button>
@@ -970,7 +978,7 @@ function renderSortList(){
   for(var i=0;i<sortWorking.length;i++){
     var c = catById(sortWorking[i]);
     if(!c) continue;
-    html += '<div class="sortrow">'
+    html += '<div class="sortrow" data-cid="'+c.id+'">'
           + '<button class="sortbtn" data-action="sort-up" data-id="'+c.id+'"'+(i===0?' disabled':'')+'>↑</button>'
           + '<span class="sortname">'+esc(c.icon)+' '+esc(c.name)+'</span>'
           + '<button class="sortbtn" data-action="sort-down" data-id="'+c.id+'"'+(i===sortWorking.length-1?' disabled':'')+'>↓</button>'
@@ -994,6 +1002,93 @@ function applySort(){
   for(var k=0;k<sortWorking.length;k++){ if(map[sortWorking[k]]) out.push(map[sortWorking[k]]); }
   if(out.length === state.categories.length){ state.categories = out; save(); }
   closeModals(); render(); toast("已更新分類順序");
+}
+
+/* ---------- 排序頁：長按拖曳 ---------- */
+var sortPress = null, sortDragRow = null;
+
+function sortRowFromEl(t){
+  while(t && t !== document.body){
+    if(t.classList && t.classList.contains("sortrow")) return t;
+    t = t.parentNode;
+  }
+  return null;
+}
+function activateSortDrag(){
+  if(!sortPress) return;
+  sortDragRow = sortPress.row;
+  sortPress = null;
+  sortDragRow.classList.add("drag-active");
+  try{ window.getSelection && window.getSelection().removeAllRanges(); }catch(err){}
+  try{ navigator.vibrate && navigator.vibrate(15); }catch(err){}
+}
+function reorderSortByY(y){
+  var list = document.getElementById("sortList");
+  var lr = list.getBoundingClientRect();
+  if(y < lr.top + 28) list.scrollTop -= 8;
+  else if(y > lr.bottom - 28) list.scrollTop += 8;
+  var rows = Array.prototype.slice.call(list.querySelectorAll(".sortrow"));
+  var ref = null;
+  for(var i=0;i<rows.length;i++){
+    if(rows[i] === sortDragRow) continue;
+    var r = rows[i].getBoundingClientRect();
+    if(y < r.top + r.height/2){ ref = rows[i]; break; }
+  }
+  if(ref) list.insertBefore(sortDragRow, ref);
+  else list.appendChild(sortDragRow);
+}
+function finishSortDrag(){
+  sortDragRow.classList.remove("drag-active");
+  var list = document.getElementById("sortList");
+  var rows = Array.prototype.slice.call(list.querySelectorAll(".sortrow"));
+  sortWorking = rows.map(function(r){ return r.getAttribute("data-cid"); });
+  sortDragRow = null;
+  renderSortList();
+}
+function onSortTouchStart(e){
+  if(e.touches && e.touches.length !== 1) return;
+  var t = e.target;
+  if(t.closest && t.closest("button")) return;
+  var row = sortRowFromEl(t);
+  if(!row) return;
+  sortPress = { row:row, y:e.touches[0].clientY, timer:null };
+  sortPress.timer = setTimeout(activateSortDrag, 250);
+}
+function onSortTouchMove(e){
+  if(sortDragRow){
+    e.preventDefault();
+    reorderSortByY(e.touches[0].clientY);
+    return;
+  }
+  if(sortPress){
+    if(Math.abs(e.touches[0].clientY - sortPress.y) > 10){
+      clearTimeout(sortPress.timer); sortPress = null;
+    }
+  }
+}
+function onSortTouchEnd(){
+  if(sortPress){ clearTimeout(sortPress.timer); sortPress = null; }
+  if(sortDragRow) finishSortDrag();
+}
+function onSortMouseDown(e){
+  if(e.button !== 0) return;
+  var t = e.target;
+  if(t.closest && t.closest("button")) return;
+  var row = sortRowFromEl(t);
+  if(!row) return;
+  e.preventDefault();
+  sortPress = { row:row, y:e.clientY, timer:null };
+  sortPress.timer = setTimeout(activateSortDrag, 250);
+}
+function onDocMouseMove(e){
+  if(sortDragRow){ e.preventDefault(); reorderSortByY(e.clientY); return; }
+  if(sortPress && Math.abs(e.clientY - sortPress.y) > 10){
+    clearTimeout(sortPress.timer); sortPress = null;
+  }
+}
+function onDocMouseUp(){
+  if(sortPress){ clearTimeout(sortPress.timer); sortPress = null; }
+  if(sortDragRow) finishSortDrag();
 }
 
 function restoreSeed(){
@@ -1090,6 +1185,15 @@ function init(){
   document.addEventListener("focusin", onFocusIn);
   document.addEventListener("change", onChange);
   document.addEventListener("keydown", onKeydown);
+
+  var sl = document.getElementById("sortList");
+  sl.addEventListener("touchstart", onSortTouchStart, { passive:false });
+  sl.addEventListener("touchmove", onSortTouchMove, { passive:false });
+  sl.addEventListener("touchend", onSortTouchEnd);
+  sl.addEventListener("touchcancel", onSortTouchEnd);
+  sl.addEventListener("mousedown", onSortMouseDown);
+  document.addEventListener("mousemove", onDocMouseMove);
+  document.addEventListener("mouseup", onDocMouseUp);
 
   render();
 }
