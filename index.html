@@ -167,6 +167,8 @@ input.stock.sm{width:60px; height:44px; font-size:19px; border-radius:12px}
   white-space:pre-wrap; word-break:break-word; font-size:16px; line-height:1.7;
   font-family:"Microsoft JhengHei","Noto Sans TC",monospace; margin-bottom:14px; overflow-x:auto;
 }
+.order-detail-toggle{display:flex; align-items:center; gap:10px; font-size:16px; color:var(--text); margin:0 4px 12px; cursor:pointer}
+.order-detail-toggle input{width:22px; height:22px; margin:0}
 .btn-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px}
 .big{
   border:none; border-radius:14px; padding:18px 10px; font-size:17px; font-weight:700;
@@ -355,9 +357,11 @@ input.stock.sm{width:60px; height:44px; font-size:19px; border-radius:12px}
 
 var STORE_KEY = "fzkf-inventory-v1";
 var THEME_KEY = "fzkf-theme";
+var ORDER_DETAIL_KEY = "fzkf-order-detail";
 var ORDER_TAB = "__order__";
 var ALL_TAB = "__all__";
 var DATA_VERSION = 2;
+var orderDetail = true;
 
 var KITCHEN_STAPLES = [
   ["沙拉油","瓶",1,1,"",false],
@@ -713,6 +717,12 @@ function renderAll(){
 }
 
 /* ---------- 補貨清單文字 ---------- */
+function needDetailText(it){
+  if(!orderDetail){ return it.note ? "（" + it.note + "）" : ""; }
+  var s = "現有 " + fmt(it.stock) + "／應備 " + fmt(it.target);
+  if(it.note) s += "；" + it.note;
+  return "（" + s + "）";
+}
 function orderText(){
   var now = new Date();
   var d = (now.getMonth()+1) + "/" + now.getDate();
@@ -727,8 +737,7 @@ function orderText(){
     lines.push("━━━━━━━━━━");
     for(var j=0;j<need.length;j++){
       var it = need[j];
-      var note = it.note ? "（" + it.note + "）" : "";
-      lines.push("▫️ " + it.name + "　補 " + fmt(needOf(it)) + " " + it.unit + note);
+      lines.push("▫️ " + it.name + "　補 " + fmt(needOf(it)) + " " + it.unit + needDetailText(it));
       total++;
     }
     lines.push("");
@@ -752,8 +761,7 @@ function orderHtml(){
     out += '<div class="cat">' + esc(cat.icon) + " " + esc(cat.name) + "</div>";
     for(var j=0;j<need.length;j++){
       var it = need[j];
-      var note = it.note ? "（" + esc(it.note) + "）" : "";
-      out += '<div class="row">▫️ ' + esc(it.name) + "　補 " + fmt(needOf(it)) + " " + esc(it.unit) + note + "</div>";
+      out += '<div class="row">▫️ ' + esc(it.name) + "　補 " + fmt(needOf(it)) + " " + esc(it.unit) + esc(needDetailText(it)) + "</div>";
       total++;
     }
   }
@@ -768,6 +776,8 @@ function renderOrder(){
   var html = ''
   + '<div class="cat-head"><h2>📋 補貨清單</h2><span class="sub">'
   +   (hasAny ? totalNeeded()+" 項待補" : "目前沒有需補品項") + '</span></div>'
+  + '<label class="chk order-detail-toggle"><input type="checkbox" data-action="toggle-order-detail"'
+  +   (orderDetail ? " checked" : "") + '> 顯示庫存明細（現有／應備）</label>'
   + '<div class="preview">' + esc(orderText()) + '</div>'
   + '<div class="btn-grid">'
   +   '<button class="big primary" data-action="copy-order">📄 複製清單</button>'
@@ -1453,6 +1463,11 @@ function onClick(e){
     case "save-cat": saveCat(); break;
     case "copy-area": copyText(document.getElementById("copyArea").value, "已複製"); break;
     case "copy-order": copyText(orderText(), "已複製補貨清單"); break;
+    case "toggle-order-detail":
+      orderDetail = !orderDetail;
+      try{ localStorage.setItem(ORDER_DETAIL_KEY, orderDetail ? "1" : "0"); }catch(e){}
+      render();
+      break;
     case "share-order": shareOrder(); break;
     case "download-word": downloadWord(); break;
     case "print-order": printOrder(); break;
@@ -1489,6 +1504,7 @@ function onKeydown(e){
 /* ---------- 啟動 ---------- */
 function init(){
   applyTheme();
+  try{ if(localStorage.getItem(ORDER_DETAIL_KEY) === "0") orderDetail = false; }catch(e){}
   state = load();
   if(!state){ state = seed(); save(); }
   else if((state.dataVersion || 0) < DATA_VERSION){ applyMigrations(); save(); }
