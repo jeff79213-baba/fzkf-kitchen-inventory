@@ -952,7 +952,7 @@ function openItemModal(id, presetCat){
   if(!isNew){ for(var k=0;k<state.items.length;k++){ if(state.items[k].id===id){ it=state.items[k]; break; } } }
   document.getElementById("f-name-label").textContent = isNew ? "品名（可一次輸入多個）" : "品名";
   var hint = document.getElementById("f-name-hint");
-  hint.textContent = isNew ? "多個品項用 . - 、 。 分隔，例：麵條.米飯.米粉" : "";
+  hint.textContent = isNew ? "多個品項用 . - 、 。 ， 分隔，例：蘋果汁，西瓜汁，葡萄汁，芭樂汁" : "";
   hint.style.display = isNew ? "block" : "none";
   document.getElementById("f-name").value = it ? it.name : "";
   document.getElementById("f-unit").value = it ? it.unit : "";
@@ -1021,7 +1021,7 @@ function deleteSelected(){
 }
 
 function splitNames(s){
-  var parts = String(s).split(/[.\-－、。\n\r]+/);
+  var parts = String(s).split(/[.\-－、。，,;；\n\r]+/);
   var out = [];
   for(var i=0;i<parts.length;i++){ var p = parts[i].trim(); if(p) out.push(p); }
   return out;
