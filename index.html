@@ -170,11 +170,17 @@ input.stock.sm{width:60px; height:44px; font-size:19px; border-radius:12px}
 .count-tile{
   position:relative; min-width:0; background:var(--card); border:1px solid var(--line);
   border-radius:12px; padding:8px 9px 9px; display:flex; flex-direction:column; gap:5px;
+  cursor:pointer;
 }
 .count-tile.changed{border-color:var(--primary); box-shadow:inset 0 0 0 1px var(--primary)}
 .count-tile.changed::after{
   content:""; position:absolute; top:8px; right:8px; width:8px; height:8px;
   border-radius:50%; background:var(--primary);
+}
+.count-tile.confirmed{border-color:var(--ok); box-shadow:inset 0 0 0 1px var(--ok)}
+.count-tile.confirmed::after{
+  content:"✓"; position:absolute; top:2px; right:7px; color:var(--ok);
+  font-size:14px; font-weight:900; line-height:1;
 }
 .count-name{
   font-size:14px; font-weight:700; line-height:1.3; word-break:break-word; padding-right:10px;
@@ -455,6 +461,7 @@ var currentTab = null;
 var editingItemId = null;
 var editingCatId = null;
 var draft = {};
+var confirmed = {};
 
 /* ---------- 工具 ---------- */
 function uid(){ return "x" + Date.now().toString(36) + Math.floor(Math.random()*1e8).toString(36); }
@@ -508,6 +515,7 @@ function save(){
 /* ---------- 盤點草稿 ---------- */
 function loadDraft(){
   var out = {};
+  confirmed = {};
   try{
     var raw = localStorage.getItem(DRAFT_KEY);
     if(!raw) return out;
@@ -519,6 +527,11 @@ function loadDraft(){
         if(isFinite(n)) out[k] = parseQty(n);
       }
     }
+    if(d.confirmed && typeof d.confirmed === "object"){
+      for(var c in d.confirmed){
+        if(Object.prototype.hasOwnProperty.call(d.confirmed, c) && d.confirmed[c]) confirmed[c] = true;
+      }
+    }
   }catch(e){}
   return out;
 }
@@ -528,14 +541,20 @@ function saveDraft(){
     for(var k in draft){
       if(Object.prototype.hasOwnProperty.call(draft, k)){ empty = false; break; }
     }
+    if(empty){
+      for(var c in confirmed){
+        if(Object.prototype.hasOwnProperty.call(confirmed, c) && confirmed[c]){ empty = false; break; }
+      }
+    }
     if(empty){ localStorage.removeItem(DRAFT_KEY); return; }
     localStorage.setItem(DRAFT_KEY, JSON.stringify({
-      version:1, values:draft, updatedAt:new Date().toISOString()
+      version:1, values:draft, confirmed:confirmed, updatedAt:new Date().toISOString()
     }));
   }catch(e){}
 }
 function clearDraftStore(){
   draft = {};
+  confirmed = {};
   try{ localStorage.removeItem(DRAFT_KEY); }catch(e){}
 }
 function pruneDraft(){
@@ -544,16 +563,20 @@ function pruneDraft(){
   for(var k in draft){
     if(Object.prototype.hasOwnProperty.call(draft, k) && !exists[k]){ delete draft[k]; changed = true; }
   }
+  for(var c in confirmed){
+    if(Object.prototype.hasOwnProperty.call(confirmed, c) && !exists[c]){ delete confirmed[c]; changed = true; }
+  }
   if(changed) saveDraft();
 }
 function draftValue(it){
   return Object.prototype.hasOwnProperty.call(draft, it.id) ? draft[it.id] : it.stock;
 }
-function draftChangedCount(){
+function draftCountedCount(){
   var n = 0;
   for(var i=0;i<state.items.length;i++){
     var it = state.items[i];
-    if(Object.prototype.hasOwnProperty.call(draft, it.id) && draft[it.id] !== it.stock) n++;
+    var changed = Object.prototype.hasOwnProperty.call(draft, it.id) && draft[it.id] !== it.stock;
+    if(changed || confirmed[it.id]) n++;
   }
   return n;
 }
@@ -699,7 +722,7 @@ function render(){
 function renderTabs(){
   var nav = document.getElementById("tabs");
   var tn = totalNeeded();
-  var dc = draftChangedCount();
+  var dc = draftCountedCount();
   var html = "";
   html += '<button class="tab'+(currentTab===ALL_TAB?" active":"")+'" data-action="tab" data-id="'+ALL_TAB+'">📦 全部品項</button>';
   html += '<button class="tab'+(currentTab===ORDER_TAB?" active":"")+'" data-action="tab" data-id="'+ORDER_TAB+'">📋 補貨清單'
@@ -826,8 +849,9 @@ function isDraftChanged(id, it){
 }
 function countTile(it){
   var changed = isDraftChanged(it.id, it);
+  var isConfirmed = !changed && !!confirmed[it.id];
   return ''
-  + '<div class="count-tile'+(changed ? " changed" : "")+'" data-id="'+it.id+'">'
+  + '<div class="count-tile'+(changed ? " changed" : "")+(isConfirmed ? " confirmed" : "")+'" data-id="'+it.id+'" data-action="toggle-count">'
   +   '<div class="count-name">'+esc(it.name)+'</div>'
   +   '<div class="count-unit">'+esc(it.unit || " ")+'</div>'
   +   '<input class="count-input" type="number" step="0.5" min="0" inputmode="decimal" '
@@ -836,7 +860,7 @@ function countTile(it){
   + '</div>';
 }
 function countBarHtml(){
-  var n = draftChangedCount();
+  var n = draftCountedCount();
   return '<div class="count-bar">'
     + '<button class="clear" data-action="clear-stocktake"'+(n > 0 ? "" : " disabled")+'>清除盤點</button>'
     + '<button class="apply" data-action="apply-stocktake"'+(n > 0 ? "" : " disabled")+'>套用盤點結果 ('+n+')</button>'
@@ -854,7 +878,7 @@ function renderCount(){
     html += '<button class="chip" data-action="jump" data-id="'+c.id+'">'+esc(c.icon)+' '+esc(c.name)+'</button>';
   }
   html += '</div>';
-  html += '<div class="allhint">點數字框直接輸入，沒填的品項維持原庫存；按下方「套用」才寫入。</div>';
+  html += '<div class="allhint">點數字框直接輸入；數量沒變時，點格子空白處標記已清點（綠勾）。按下方「套用」才寫入。</div>';
 
   for(var m=0;m<state.categories.length;m++){
     var cat = state.categories[m];
@@ -879,7 +903,7 @@ function renderCount(){
   view.innerHTML = html;
 }
 function updateCountUI(){
-  var n = draftChangedCount();
+  var n = draftCountedCount();
   var bar = document.querySelector(".count-bar");
   if(bar){
     var apply = bar.querySelector(".apply"), clear = bar.querySelector(".clear");
@@ -906,8 +930,20 @@ function syncCountTile(id){
   var it = findItem(id);
   var tile = document.querySelector('.count-tile[data-id="'+id+'"]');
   if(!it || !tile) return;
-  if(isDraftChanged(id, it)) tile.classList.add("changed");
-  else tile.classList.remove("changed");
+  var changed = isDraftChanged(id, it);
+  var isConfirmed = !changed && !!confirmed[id];
+  if(changed) tile.classList.add("changed"); else tile.classList.remove("changed");
+  if(isConfirmed) tile.classList.add("confirmed"); else tile.classList.remove("confirmed");
+}
+function toggleConfirmed(id){
+  var it = findItem(id);
+  if(!it) return;
+  if(isDraftChanged(id, it)) return;
+  if(confirmed[id]) delete confirmed[id];
+  else confirmed[id] = true;
+  saveDraft();
+  syncCountTile(id);
+  updateCountUI();
 }
 function applyStocktake(){
   var inputs = document.querySelectorAll('#view input[data-role="count"]');
@@ -921,16 +957,20 @@ function applyStocktake(){
     var n = parseQty(raw);
     if(n !== it.stock) changes.push({ it:it, value:n });
   }
-  if(!changes.length){ toast("沒有變更，不需要套用"); return; }
-  if(!confirm("將套用 "+changes.length+" 項盤點結果，覆蓋目前庫存，確定嗎？")) return;
+  var counted = draftCountedCount();
+  if(!changes.length && counted === 0){ toast("沒有變更，不需要套用"); return; }
+  var msg = changes.length > 0
+    ? "本次已盤點 "+counted+" 項，其中 "+changes.length+" 項數量有變更，確定套用？"
+    : "本次已盤點 "+counted+" 項，數量都與目前庫存相同，確定完成盤點？";
+  if(!confirm(msg)) return;
   for(var k=0;k<changes.length;k++){ changes[k].it.stock = changes[k].value; }
   save();
   clearDraftStore();
   render();
-  toast("已更新 "+changes.length+" 項庫存");
+  toast(changes.length > 0 ? ("已更新 "+changes.length+" 項庫存") : "已完成盤點（庫存無變動）");
 }
 function clearStocktake(){
-  if(draftChangedCount() === 0){ toast("目前沒有盤點變更"); return; }
+  if(draftCountedCount() === 0){ toast("目前沒有盤點變更"); return; }
   if(!confirm("確定清除這次盤點的所有輸入，恢復成目前庫存嗎？")) return;
   clearDraftStore();
   render();
@@ -1696,6 +1736,10 @@ function onClick(e){
     case "print-order": printOrder(); break;
     case "apply-stocktake": applyStocktake(); break;
     case "clear-stocktake": clearStocktake(); break;
+    case "toggle-count":
+      if(e.target.closest && e.target.closest("input,button")) break;
+      toggleConfirmed(id);
+      break;
   }
 }
 
