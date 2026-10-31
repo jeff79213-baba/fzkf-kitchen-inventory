@@ -161,6 +161,50 @@ input.stock:focus{outline:2px solid var(--primary); border-color:var(--primary)}
 .step.sm{width:44px; height:44px; font-size:22px; border-radius:12px}
 input.stock.sm{width:60px; height:44px; font-size:19px; border-radius:12px}
 
+/* 盤點頁 */
+.cat-sec-head .sub{font-size:13px; color:var(--muted); font-weight:600; flex:0 0 auto}
+.count-grid{
+  display:grid; grid-template-columns:repeat(auto-fill,minmax(148px,1fr));
+  gap:8px; margin-bottom:14px;
+}
+.count-tile{
+  position:relative; min-width:0; background:var(--card); border:1px solid var(--line);
+  border-radius:12px; padding:8px 9px 9px; display:flex; flex-direction:column; gap:5px;
+}
+.count-tile.changed{border-color:var(--primary); box-shadow:inset 0 0 0 1px var(--primary)}
+.count-tile.changed::after{
+  content:""; position:absolute; top:8px; right:8px; width:8px; height:8px;
+  border-radius:50%; background:var(--primary);
+}
+.count-name{
+  font-size:14px; font-weight:700; line-height:1.3; word-break:break-word; padding-right:10px;
+  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
+  overflow:hidden; min-height:2.6em;
+}
+.count-unit{font-size:11px; color:var(--muted); margin-top:-3px; min-height:1.4em}
+.count-input{
+  width:100%; height:46px; text-align:center; font-size:21px; font-weight:800;
+  border:1px solid var(--line); border-radius:10px; background:var(--bg); color:var(--text);
+  padding:0 4px;
+}
+.count-input:focus{outline:2px solid var(--primary); border-color:var(--primary)}
+.count-tile.changed .count-input{background:var(--card); border-color:var(--primary)}
+.count-spacer{height:84px}
+.count-bar{
+  position:fixed; left:0; right:0; bottom:0; z-index:35;
+  background:var(--header); border-top:1px solid var(--line);
+  padding:10px 12px calc(10px + env(safe-area-inset-bottom));
+  display:flex; gap:8px; max-width:640px; margin:0 auto;
+}
+.count-bar button{
+  border:none; border-radius:12px; font-size:16px; font-weight:800; cursor:pointer;
+  padding:15px 14px;
+}
+.count-bar .clear{flex:0 0 auto; background:var(--chip); color:var(--text)}
+.count-bar .apply{flex:1; background:var(--primary); color:var(--primary-t)}
+.count-bar button:disabled{opacity:.4; cursor:default}
+.tab .badge.draft{background:var(--primary); color:var(--primary-t)}
+
 /* 補貨清單頁 */
 .preview{
   background:var(--card); border:1px solid var(--line); border-radius:16px; padding:16px;
@@ -358,8 +402,10 @@ input.stock.sm{width:60px; height:44px; font-size:19px; border-radius:12px}
 var STORE_KEY = "fzkf-inventory-v1";
 var THEME_KEY = "fzkf-theme";
 var ORDER_DETAIL_KEY = "fzkf-order-detail";
+var DRAFT_KEY = "fzkf-stocktake-draft";
 var ORDER_TAB = "__order__";
 var ALL_TAB = "__all__";
+var STOCKTAKE_TAB = "__count__";
 var DATA_VERSION = 2;
 var orderDetail = true;
 
@@ -408,6 +454,7 @@ var state = null;
 var currentTab = null;
 var editingItemId = null;
 var editingCatId = null;
+var draft = {};
 
 /* ---------- 工具 ---------- */
 function uid(){ return "x" + Date.now().toString(36) + Math.floor(Math.random()*1e8).toString(36); }
@@ -456,6 +503,59 @@ function save(){
   }catch(e){
     toast("儲存失敗（瀏覽器可能已滿或被限制）", true);
   }
+}
+
+/* ---------- 盤點草稿 ---------- */
+function loadDraft(){
+  var out = {};
+  try{
+    var raw = localStorage.getItem(DRAFT_KEY);
+    if(!raw) return out;
+    var d = JSON.parse(raw);
+    if(!d || typeof d !== "object" || !d.values || typeof d.values !== "object") return out;
+    for(var k in d.values){
+      if(Object.prototype.hasOwnProperty.call(d.values, k)){
+        var n = Number(d.values[k]);
+        if(isFinite(n)) out[k] = parseQty(n);
+      }
+    }
+  }catch(e){}
+  return out;
+}
+function saveDraft(){
+  try{
+    var empty = true;
+    for(var k in draft){
+      if(Object.prototype.hasOwnProperty.call(draft, k)){ empty = false; break; }
+    }
+    if(empty){ localStorage.removeItem(DRAFT_KEY); return; }
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({
+      version:1, values:draft, updatedAt:new Date().toISOString()
+    }));
+  }catch(e){}
+}
+function clearDraftStore(){
+  draft = {};
+  try{ localStorage.removeItem(DRAFT_KEY); }catch(e){}
+}
+function pruneDraft(){
+  var exists = {}, changed = false;
+  for(var i=0;i<state.items.length;i++){ exists[state.items[i].id] = true; }
+  for(var k in draft){
+    if(Object.prototype.hasOwnProperty.call(draft, k) && !exists[k]){ delete draft[k]; changed = true; }
+  }
+  if(changed) saveDraft();
+}
+function draftValue(it){
+  return Object.prototype.hasOwnProperty.call(draft, it.id) ? draft[it.id] : it.stock;
+}
+function draftChangedCount(){
+  var n = 0;
+  for(var i=0;i<state.items.length;i++){
+    var it = state.items[i];
+    if(Object.prototype.hasOwnProperty.call(draft, it.id) && draft[it.id] !== it.stock) n++;
+  }
+  return n;
 }
 
 /* ---------- 範例資料 ---------- */
@@ -593,15 +693,19 @@ function totalNeeded(){
 function render(){
   renderTabs();
   if(currentTab === ORDER_TAB) renderOrder();
+  else if(currentTab === STOCKTAKE_TAB) renderCount();
   else { currentTab = ALL_TAB; renderAll(); }
 }
 function renderTabs(){
   var nav = document.getElementById("tabs");
   var tn = totalNeeded();
+  var dc = draftChangedCount();
   var html = "";
   html += '<button class="tab'+(currentTab===ALL_TAB?" active":"")+'" data-action="tab" data-id="'+ALL_TAB+'">📦 全部品項</button>';
   html += '<button class="tab'+(currentTab===ORDER_TAB?" active":"")+'" data-action="tab" data-id="'+ORDER_TAB+'">📋 補貨清單'
     + (tn>0 ? '<span class="badge">'+tn+'</span>' : '') + '</button>';
+  html += '<button class="tab'+(currentTab===STOCKTAKE_TAB?" active":"")+'" data-action="tab" data-id="'+STOCKTAKE_TAB+'">📝 盤點'
+    + (dc>0 ? '<span class="badge draft">'+dc+'</span>' : '') + '</button>';
   nav.innerHTML = html;
 }
 
@@ -714,6 +818,123 @@ function renderAll(){
     html += '</section>';
   }
   view.innerHTML = html;
+}
+
+/* ---------- 盤點頁 ---------- */
+function isDraftChanged(id, it){
+  return Object.prototype.hasOwnProperty.call(draft, id) && draft[id] !== it.stock;
+}
+function countTile(it){
+  var changed = isDraftChanged(it.id, it);
+  return ''
+  + '<div class="count-tile'+(changed ? " changed" : "")+'" data-id="'+it.id+'">'
+  +   '<div class="count-name">'+esc(it.name)+'</div>'
+  +   '<div class="count-unit">'+esc(it.unit || " ")+'</div>'
+  +   '<input class="count-input" type="number" step="0.5" min="0" inputmode="decimal" '
+  +     'data-role="count" data-id="'+it.id+'" value="'+fmt(draftValue(it))+'" '
+  +     'onfocus="this.select()">'
+  + '</div>';
+}
+function countBarHtml(){
+  var n = draftChangedCount();
+  return '<div class="count-bar">'
+    + '<button class="clear" data-action="clear-stocktake"'+(n > 0 ? "" : " disabled")+'>清除盤點</button>'
+    + '<button class="apply" data-action="apply-stocktake"'+(n > 0 ? "" : " disabled")+'>套用盤點結果 ('+n+')</button>'
+    + '</div>';
+}
+function renderCount(){
+  var view = document.getElementById("view");
+  if(!state.categories.length){
+    view.innerHTML = '<div class="empty">目前沒有分類，請從 ⚙️ 設定新增分類</div>';
+    return;
+  }
+  var html = '<div class="chips" id="chips">';
+  for(var i=0;i<state.categories.length;i++){
+    var c = state.categories[i];
+    html += '<button class="chip" data-action="jump" data-id="'+c.id+'">'+esc(c.icon)+' '+esc(c.name)+'</button>';
+  }
+  html += '</div>';
+  html += '<div class="allhint">點數字框直接輸入，沒填的品項維持原庫存；按下方「套用」才寫入。</div>';
+
+  for(var m=0;m<state.categories.length;m++){
+    var cat = state.categories[m];
+    var items = [];
+    for(var k=0;k<state.items.length;k++){ if(state.items[k].categoryId===cat.id) items.push(state.items[k]); }
+    html += '<section class="cat-section" data-cat="'+cat.id+'">';
+    html +=   '<div class="cat-sec-head" data-cat="'+cat.id+'">'
+           +     '<span class="cat-sec-name">'+esc(cat.icon)+' '+esc(cat.name)+'</span>'
+           +     '<span class="sub">'+items.length+' 項</span>'
+           +   '</div>';
+    if(!items.length){
+      html += '<div class="all-empty">（尚無品項）</div>';
+    }else{
+      html += '<div class="count-grid">';
+      for(var j=0;j<items.length;j++){ html += countTile(items[j]); }
+      html += '</div>';
+    }
+    html += '</section>';
+  }
+  html += countBarHtml();
+  html += '<div class="count-spacer"></div>';
+  view.innerHTML = html;
+}
+function updateCountUI(){
+  var n = draftChangedCount();
+  var bar = document.querySelector(".count-bar");
+  if(bar){
+    var apply = bar.querySelector(".apply"), clear = bar.querySelector(".clear");
+    if(apply){ apply.textContent = "套用盤點結果 ("+n+")"; apply.disabled = (n === 0); }
+    if(clear){ clear.disabled = (n === 0); }
+  }
+  var nav = document.getElementById("tabs");
+  if(!nav) return;
+  var tab = nav.querySelector('[data-id="'+STOCKTAKE_TAB+'"]');
+  if(!tab) return;
+  var badge = tab.querySelector(".badge");
+  if(n > 0){
+    if(!badge){
+      badge = document.createElement("span");
+      badge.className = "badge draft";
+      tab.appendChild(badge);
+    }
+    badge.textContent = n;
+  }else if(badge){
+    badge.parentNode.removeChild(badge);
+  }
+}
+function syncCountTile(id){
+  var it = findItem(id);
+  var tile = document.querySelector('.count-tile[data-id="'+id+'"]');
+  if(!it || !tile) return;
+  if(isDraftChanged(id, it)) tile.classList.add("changed");
+  else tile.classList.remove("changed");
+}
+function applyStocktake(){
+  var inputs = document.querySelectorAll('#view input[data-role="count"]');
+  var changes = [];
+  for(var i=0;i<inputs.length;i++){
+    var t = inputs[i];
+    var it = findItem(t.getAttribute("data-id"));
+    if(!it) continue;
+    var raw = String(t.value).trim();
+    if(raw === "") continue;
+    var n = parseQty(raw);
+    if(n !== it.stock) changes.push({ it:it, value:n });
+  }
+  if(!changes.length){ toast("沒有變更，不需要套用"); return; }
+  if(!confirm("將套用 "+changes.length+" 項盤點結果，覆蓋目前庫存，確定嗎？")) return;
+  for(var k=0;k<changes.length;k++){ changes[k].it.stock = changes[k].value; }
+  save();
+  clearDraftStore();
+  render();
+  toast("已更新 "+changes.length+" 項庫存");
+}
+function clearStocktake(){
+  if(draftChangedCount() === 0){ toast("目前沒有盤點變更"); return; }
+  if(!confirm("確定清除這次盤點的所有輸入，恢復成目前庫存嗎？")) return;
+  clearDraftStore();
+  render();
+  toast("已清除盤點");
 }
 
 /* ---------- 補貨清單文字 ---------- */
@@ -911,6 +1132,7 @@ function importJson(file){
       }
       if(!confirm("匯入後將覆蓋目前所有資料，確定要繼續嗎？")) return;
       state = data;
+      clearDraftStore();
       currentTab = ALL_TAB;
       save(); render(); toast("已匯入資料");
     }catch(e){
@@ -1394,6 +1616,7 @@ function fireEditPress(){
 function restoreSeed(){
   if(!confirm("將還原成範例資料，目前所有變更都會消失，確定嗎？")) return;
   state = seed();
+  clearDraftStore();
   currentTab = ALL_TAB;
   save(); closeMenu(); render(); toast("已還原範例資料");
 }
@@ -1471,14 +1694,54 @@ function onClick(e){
     case "share-order": shareOrder(); break;
     case "download-word": downloadWord(); break;
     case "print-order": printOrder(); break;
+    case "apply-stocktake": applyStocktake(); break;
+    case "clear-stocktake": clearStocktake(); break;
   }
 }
 
 function onFocusIn(e){
   if(e.target && e.target.getAttribute){
     var r = e.target.getAttribute("data-role");
-    if(r === "stock" || r === "target"){ try{ e.target.select(); }catch(err){} }
+    if(r === "stock" || r === "target" || r === "count"){ try{ e.target.select(); }catch(err){} }
   }
+}
+function onInput(e){
+  var t = e.target;
+  if(!t || !t.getAttribute || t.getAttribute("data-role") !== "count") return;
+  var id = t.getAttribute("data-id");
+  var it = findItem(id);
+  if(!it) return;
+  var raw = String(t.value).trim();
+  if(raw === ""){
+    delete draft[id];
+  }else{
+    var n = parseQty(raw);
+    if(n === it.stock) delete draft[id];
+    else draft[id] = n;
+  }
+  saveDraft();
+  syncCountTile(id);
+  updateCountUI();
+}
+function onFocusOut(e){
+  var t = e.target;
+  if(!t || !t.getAttribute || t.getAttribute("data-role") !== "count") return;
+  var id = t.getAttribute("data-id");
+  var it = findItem(id);
+  if(!it) return;
+  var raw = String(t.value).trim();
+  if(raw === ""){
+    delete draft[id];
+    t.value = fmt(it.stock);
+  }else{
+    var n = parseQty(raw);
+    if(n === it.stock) delete draft[id];
+    else draft[id] = n;
+    t.value = fmt(n);
+  }
+  saveDraft();
+  syncCountTile(id);
+  updateCountUI();
 }
 function onChange(e){
   var t = e.target;
@@ -1508,6 +1771,8 @@ function init(){
   state = load();
   if(!state){ state = seed(); save(); }
   else if((state.dataVersion || 0) < DATA_VERSION){ applyMigrations(); save(); }
+  draft = loadDraft();
+  pruneDraft();
   currentTab = ALL_TAB;
 
   document.getElementById("importFile").addEventListener("change", function(ev){
@@ -1517,6 +1782,8 @@ function init(){
   });
   document.addEventListener("click", onClick);
   document.addEventListener("focusin", onFocusIn);
+  document.addEventListener("focusout", onFocusOut);
+  document.addEventListener("input", onInput);
   document.addEventListener("change", onChange);
   document.addEventListener("keydown", onKeydown);
 
